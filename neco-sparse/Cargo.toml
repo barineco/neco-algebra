@@ -1,0 +1,20 @@
+[package]
+name = "neco-sparse"
+version = "0.2.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "sparse matrices for numerical linear algebra"
+documentation = "https://docs.rs/neco-sparse"
+readme = "README.md"
+keywords = ["sparse", "matrix", "linear-algebra", "numerics"]
+categories = ["mathematics", "no-std"]
+include = ["Cargo.toml", "src/lib.rs", "README.md", "README-ja.md", "LICENSE"]
+
+[features]
+default = ["std"]
+std = ["neco-linear-types/std"]
+
+[dependencies]
+neco-linear-types = { path = "../neco-linear-types", version = "=0.1.0", default-features = false }

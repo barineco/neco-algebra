@@ -1,0 +1,17 @@
+[package]
+name = "neco-linear-types"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "shapes, vectors, and linear operators for numerical linear algebra"
+documentation = "https://docs.rs/neco-linear-types"
+readme = "README.md"
+keywords = ["linear-algebra", "vector", "operator", "numerics"]
+categories = ["mathematics", "no-std"]
+include = ["Cargo.toml", "src/lib.rs", "README.md", "README-ja.md", "LICENSE"]
+
+[features]
+default = ["std"]
+std = []

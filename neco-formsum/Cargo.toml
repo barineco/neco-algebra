@@ -1,0 +1,33 @@
+[package]
+name = "neco-formsum"
+version = "0.1.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "exact rational linear combinations of radical monomials"
+documentation = "https://docs.rs/neco-formsum"
+readme = "README.md"
+keywords = ["exact-arithmetic", "radical", "symbolic", "algebra"]
+categories = ["mathematics", "no-std"]
+include = [
+    "Cargo.toml",
+    "src/lib.rs",
+    "src/annihilating.rs",
+    "src/enclosure.rs",
+    "src/error.rs",
+    "src/extension.rs",
+    "src/formsum.rs",
+    "src/raw.rs",
+    "README.md",
+    "README-ja.md",
+    "LICENSE",
+]
+
+[features]
+default = ["std"]
+std = ["neco-bigint/std", "neco-monomial/std"]
+
+[dependencies]
+neco-bigint = { path = "../neco-bigint", version = "=0.1.1", default-features = false }
+neco-monomial = { path = "../neco-monomial", version = "=0.1.1", default-features = false }

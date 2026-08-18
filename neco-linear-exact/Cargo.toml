@@ -1,0 +1,32 @@
+[package]
+name = "neco-linear-exact"
+version = "0.1.2"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "exact dense linear algebra over rational, radical, and real algebraic scalars"
+documentation = "https://docs.rs/neco-linear-exact"
+readme = "README.md"
+keywords = ["linear-algebra", "exact-arithmetic", "matrix", "algebraic-numbers"]
+categories = ["mathematics", "no-std"]
+include = ["Cargo.toml", "src/lib.rs", "README.md", "README-ja.md", "LICENSE"]
+
+[features]
+default = ["std"]
+std = [
+    "neco-linear-types/std",
+    "neco-linear-dense/std",
+    "neco-bigint/std",
+    "neco-formsum/std",
+    "neco-algnum/std",
+    "neco-expr/std",
+]
+
+[dependencies]
+neco-linear-types = { path = "../neco-linear-types", version = "=0.1.0", default-features = false }
+neco-linear-dense = { path = "../neco-linear-dense", version = "=0.1.0", default-features = false }
+neco-bigint = { path = "../neco-bigint", version = "=0.1.1", default-features = false }
+neco-formsum = { path = "../neco-formsum", version = "=0.1.1", default-features = false }
+neco-algnum = { path = "../neco-algnum", version = "=0.1.1", default-features = false }
+neco-expr = { path = "../neco-expr", version = "=0.1.2", default-features = false }

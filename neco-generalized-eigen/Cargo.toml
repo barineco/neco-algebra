@@ -1,0 +1,28 @@
+[package]
+name = "neco-generalized-eigen"
+version = "0.2.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "public types for generalized eigenvalue problems"
+documentation = "https://docs.rs/neco-generalized-eigen"
+readme = "README.md"
+keywords = ["eigenvalue", "matrix", "linear-algebra", "numerics"]
+categories = ["mathematics", "no-std"]
+include = ["Cargo.toml", "src/lib.rs", "README.md", "README-ja.md", "LICENSE"]
+
+[features]
+default = ["std"]
+std = [
+    "neco-linear-types/std",
+    "neco-linear-dense/std",
+    "neco-sparse/std",
+    "neco-complex/std",
+]
+
+[dependencies]
+neco-complex = { path = "../neco-complex", version = "=0.2.0", default-features = false }
+neco-linear-dense = { path = "../neco-linear-dense", version = "=0.1.0", default-features = false }
+neco-linear-types = { path = "../neco-linear-types", version = "=0.1.0", default-features = false }
+neco-sparse = { path = "../neco-sparse", version = "=0.2.0", default-features = false }

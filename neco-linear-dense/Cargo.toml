@@ -1,0 +1,20 @@
+[package]
+name = "neco-linear-dense"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "dense matrices for numerical linear algebra"
+documentation = "https://docs.rs/neco-linear-dense"
+readme = "README.md"
+keywords = ["matrix", "linear-algebra", "numerics"]
+categories = ["mathematics", "no-std"]
+include = ["Cargo.toml", "src/lib.rs", "README.md", "README-ja.md", "LICENSE"]
+
+[features]
+default = ["std"]
+std = ["neco-linear-types/std"]
+
+[dependencies]
+neco-linear-types = { path = "../neco-linear-types", version = "=0.1.0", default-features = false }

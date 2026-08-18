@@ -1,0 +1,28 @@
+[package]
+name = "neco-bigint"
+version = "0.1.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "arbitrary-precision integers, rationals, and dyadic intervals for exact arithmetic"
+documentation = "https://docs.rs/neco-bigint"
+readme = "README.md"
+keywords = ["arbitrary-precision", "integer", "rational", "dyadic"]
+categories = ["mathematics", "no-std"]
+include = [
+    "Cargo.toml",
+    "src/lib.rs",
+    "src/dyadic.rs",
+    "src/error.rs",
+    "src/integer.rs",
+    "src/natural.rs",
+    "src/rational.rs",
+    "README.md",
+    "README-ja.md",
+    "LICENSE",
+]
+
+[features]
+default = ["std"]
+std = []

@@ -1,0 +1,21 @@
+[package]
+name = "neco-eigensolve-faer"
+version = "0.1.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Faer adapter for symmetric generalized eigenvalue problems"
+documentation = "https://docs.rs/neco-eigensolve-faer"
+readme = "README.md"
+keywords = ["eigenvalue", "generalized", "faer", "numerics"]
+categories = ["mathematics"]
+include = ["Cargo.toml", "src/lib.rs", "README.md", "README-ja.md", "LICENSE"]
+
+[dependencies]
+faer = { version = "0.24", default-features = false, features = ["std", "linalg"] }
+neco-complex = { path = "../neco-complex", version = "=0.2.0" }
+neco-eigensolve = { path = "../neco-eigensolve", version = "=0.2.1" }
+neco-generalized-eigen = { path = "../neco-generalized-eigen", version = "=0.2.0" }
+neco-linear-dense = { path = "../neco-linear-dense", version = "=0.1.0" }
+neco-linear-types = { path = "../neco-linear-types", version = "=0.1.0" }

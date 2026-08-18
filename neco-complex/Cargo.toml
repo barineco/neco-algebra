@@ -1,0 +1,17 @@
+[package]
+name = "neco-complex"
+version = "0.2.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "complex scalar types for numerical linear algebra"
+documentation = "https://docs.rs/neco-complex"
+readme = "README.md"
+keywords = ["complex", "linear-algebra", "eigenvalue", "numerics"]
+categories = ["mathematics", "no-std"]
+include = ["Cargo.toml", "src/lib.rs", "README.md", "README-ja.md", "LICENSE"]
+
+[features]
+default = ["std"]
+std = []

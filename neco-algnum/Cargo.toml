@@ -1,0 +1,37 @@
+[package]
+name = "neco-algnum"
+version = "0.1.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "exact real algebraic numbers with certified root isolation"
+documentation = "https://docs.rs/neco-algnum"
+readme = "README.md"
+keywords = ["algebraic-numbers", "exact-arithmetic", "polynomial", "roots"]
+categories = ["mathematics", "no-std"]
+include = [
+    "Cargo.toml",
+    "src/algebraic.rs",
+    "src/error.rs",
+    "src/factor.rs",
+    "src/lib.rs",
+    "src/polynomial.rs",
+    "src/resultant.rs",
+    "src/sturm.rs",
+    "tests/*.rs",
+    "README.md",
+    "README-ja.md",
+    "LICENSE",
+]
+
+[features]
+default = ["std"]
+std = ["neco-bigint/std", "neco-formsum/std"]
+
+[dependencies]
+neco-bigint = { path = "../neco-bigint", version = "=0.1.1", default-features = false }
+neco-formsum = { path = "../neco-formsum", version = "=0.1.1", default-features = false }
+
+[dev-dependencies]
+neco-monomial = { path = "../neco-monomial", version = "=0.1.1", default-features = false }
