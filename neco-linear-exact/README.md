@@ -8,8 +8,8 @@ This crate provides exact dense linear algebra. It supports rational values, nor
 
 - `ExactScalar`: fallible scalar operations
 - `ExactLinearError`: operation failures
-- `ExactMatrix<T>`: exact row-major matrix
-- `ExactLinearSolution<T>`: system solution
+- `ExactMatrix<T>`: exact row-major matrix with validated shape and storage length
+- `ExactLinearSolution<T>`: unique solution, affine solution with a kernel basis, or inconsistent system
 - `determinant`: square-matrix determinant
 - `rank`: matrix rank
 - `kernel_basis`: kernel vectors
@@ -17,10 +17,10 @@ This crate provides exact dense linear algebra. It supports rational values, nor
 - `project_vector_f64`: certified vector projection
 - `project_matrix_f64`: certified matrix projection
 
-Certified projections take an exact vector or an `ExactMatrix<T>` as input and provide these values:
+The matrix type provides shape, row count, column count, indexed value access, and row-major value access. Certified projections take an exact vector or matrix as input and provide these values:
 
-- `CertifiedVectorProjection`: policy, per-element certificates, and the sum of their absolute-error bounds
-- `CertifiedMatrixProjection`: policy, row-major per-element certificates, the projected `DenseMatrix<f64>`, and the sum of the absolute-error bounds
+- `CertifiedVectorProjection`: policy, projected vector, per-element certificates, and the sum of their absolute-error bounds
+- `CertifiedMatrixProjection`: policy, projected matrix, row-major per-element certificates, and the sum of their absolute-error bounds
 
 Elimination scans columns from left to right. It selects the first nonzero row at or below the pivot row. The resulting pivot sequence determines row exchanges, kernel vectors, and solution vectors.
 

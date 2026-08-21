@@ -9,9 +9,11 @@
 - `EigensolveConfig`: 要求するモード数、許容差、反復上限
 - `EigensolveError`: 入力・設定・結果の検証とメモリ確保の失敗
 - `EigensolveRequest<R>`: 問題、構成、利用者が所有する射影参照
-- `EigensolveResult<R>`: 固有空間、収束状態、スペクトルシフト、射影参照
+- `EigensolveResult<R>`: 固有空間、収束状態、スペクトルシフト、要求から移された射影参照
 - `solve_symmetric_f64`: 密な実対称問題
-- `solve_request_symmetric_f64`: 射影参照を計算結果へ移す要求 API
+- `solve_request_symmetric_f64`: 要求を消費し、射影参照を計算結果へ移動
+- `projection_reference`: 要求または結果が持つ射影参照を借用
+- `into_projection_reference`: 結果が所有する射影参照を取得
 - `solve_csr_symmetric_f64`: CSR の実対称問題
 
 ## 計算エンジン

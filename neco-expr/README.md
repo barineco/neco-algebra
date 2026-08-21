@@ -142,7 +142,7 @@ Failures are separated by operation stage:
 - `GraphError`: exhausted IDs, references to nodes yet to be inserted, node cloning, and graph storage
 - `InsertError`: duplicate IDs, atom-value cloning, and input-map storage
 - `EvalError`: division by zero, zero powers, even roots, and lower-crate failures
-- `ResolveError`: missing declarations, unknown IDs, finite range, evaluation, enclosure, and result storage
+- `ResolveError`: missing declarations, unknown IDs, finite range, evaluation, lower arithmetic, and result storage
 - `ScalarProjectionError`: range, lower-crate, and storage failures of standalone projection
 - `StorageError`: capacity overflow and allocation refusal with the required total element count
 
@@ -152,6 +152,41 @@ Lower failures and checked copying use these APIs:
 - `try_clone`: checks allocation while copying owned sequences
 
 `try_clone` is the single copying path for types that own sequences.
+
+## High-level exact computation
+
+The high-level API assigns exact and numerical computation to the Modal Field Projection and Wavesim consumers. The lower-level expression graph API remains its input.
+
+The main input values are:
+
+- `ReadExactNumericInput`: expression graphs and atoms read from the two owners
+- `ExactAllocationInput`: externally observed capabilities, implementation sources, and exact inputs
+- `ExactExpressionRequirement`: one consumer, selected expressions, one typed exact decision, and one absolute-precision requirement
+- `NecoObservedCapability`: a capability supplied by external observation
+- `NecoImplementationSource`: an implementation source supplied by external observation
+
+The six operations move ownership through one pipeline:
+
+1. `read_exact_numeric_inputs`: convert the two owners' inputs into a read result
+2. `allocate_exact_numeric`: classify every candidate into three finite sets
+3. `normalize_exact_expressions`: normalize each owner's expression graph
+4. `decide_exact_properties`: perform the requested exact decisions
+5. `resolve_certified_f64`: resolve the requested expressions into certified floating-point values
+6. `assemble_exact_computation_product`: collect allocations, requirements, decisions, and certified values
+
+`ExactNumericAllocation` contains these complete sets:
+
+- exact inputs
+- exact decisions
+- numerical operations
+
+`ExactComputationProduct` returns certified values for every consumer. Within one owner's expression graph, equal expression-and-precision requests share one resolution.
+
+The observation entry point is:
+
+- `direct_inspection`: allocations, requirements, typed decisions, certified values, and the shared resolution count
+
+All high-level failures use the closed `NecoFailure` family. It preserves the operation, consumer, expression, atom, or decision location and maps storage and lower arithmetic failures. Numerical error budgets remain owned by Modal Field Projection or Wavesim and are not added to `CertifiedF64::absolute_error()`.
 
 ## Configuration and dependencies
 
@@ -171,25 +206,3 @@ cargo check -p neco-expr --no-default-features
 ## License
 
 MIT License.
-
-## `ExactComputationProduct`
-
-The high-level API preserves the lower-level graph API and assigns exact and numerical responsibilities to the modal-field-projection and Wavesim consumers.
-
-- `ExactExpressionRequirement`: one consumer, its expressions, one typed exact decision, and one `AbsoluteBits` requirement
-- `ExactNumericAllocation`: exact inputs, exact decisions, numerical operations, descent consumers, and owner-specific numerical error budgets
-
-The six operations form one ownership-moving pipeline:
-
-1. `read_exact_numeric_inputs`
-2. `allocate_exact_numeric`
-3. `normalize_exact_expressions`
-4. `decide_exact_properties`
-5. `resolve_certified_f64`
-6. `assemble_exact_computation_product`
-
-`ExactComputationProduct` returns one certified bundle for each consumer. Within one owner's expression graph, equal expression-and-precision requests share one exact-to-`f64` resolution.
-
-`direct_inspection` exposes allocations, requirements, typed decisions, certified bundles, and the shared resolution count. It performs no solver, file, process, network, or CLI work.
-
-All high-level failures use the closed `NecoFailure` family. It preserves the operation, consumer, expression, atom, or decision location and maps storage and lower arithmetic failures. Numerical error budgets remain owned by Modal Field Projection or Wavesim and are not added to `CertifiedF64::absolute_error()`.

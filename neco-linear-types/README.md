@@ -9,8 +9,18 @@
 - `Shape`: row and column dimensions with checked element counts
 - `RowIndex`, `ColumnIndex`: indices created through shape validation
 - `Vector<T>`: vector storage with checked construction and value access
-- `LinearOperator<T>`: a trait declaring the input and output vector lengths and the `apply` signature; length validation belongs to each implementation
+- `LinearOperator<T>`: interface for input length, output length, and application
 - `LinearError`: dimension, index, storage-length, capacity, allocation, and storage-state failures
+
+The linear-operator interface has these signatures:
+
+```text
+domain(&self) -> usize
+codomain(&self) -> usize
+apply(&self, input: &Vector<T>) -> Result<Vector<T>, LinearError>
+```
+
+Each implementation validates its input and output lengths.
 
 ## Runtime configuration
 

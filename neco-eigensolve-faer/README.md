@@ -7,14 +7,16 @@
 ## API
 
 ```text
-solve_symmetric_f64(GeneralizedEigenProblem, EigensolveConfig)
+solve_symmetric_f64(&GeneralizedEigenProblem, EigensolveConfig)
   -> Result<EigensolveResult, EigensolveFaerError>
 
 solve_request_symmetric_f64(EigensolveRequest<R>)
   -> Result<EigensolveResult<R>, EigensolveFaerError>
 ```
 
-The solver returns mass-normalized eigenvectors and residuals computed from the input problem. It accepts finite symmetric stiffness and mass matrices. The mass matrix must be positive definite. Invalid matrices and solver failures return `EigensolveFaerError`.
+The solver returns mass-normalized eigenvectors and residuals computed from the input problem. Stiffness and mass matrices must be finite and symmetric, and the mass matrix must be positive definite.
+
+Exactly repeated eigenvalues return a complete eigenspace, and the spectral shift is zero. The request form moves its projection reference into the result. Invalid matrices and solver failures return `EigensolveFaerError`.
 
 ## Runtime configuration
 

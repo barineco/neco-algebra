@@ -79,6 +79,8 @@ pub fn solve_request_symmetric_f64<R>(
     solve_parts(&problem, config, projection_reference)
 }
 
+/// Transforms the generalized problem into a symmetric standard problem using
+/// its positive-definite mass matrix.
 fn solve_parts<R>(
     problem: &GeneralizedEigenProblem,
     config: EigensolveConfig,
@@ -308,6 +310,8 @@ fn build_eigenspaces(
     Ok(eigenspaces)
 }
 
+/// Normalizes a generalized eigenvector in the mass inner product and makes
+/// its maximum-magnitude component positive.
 fn canonicalized_vector(
     problem: &GeneralizedEigenProblem,
     eigenvectors: faer::MatRef<'_, f64>,
@@ -370,6 +374,7 @@ fn mass_inner_product(
     Ok(sum)
 }
 
+/// Sorts ascending while preserving input order for equal eigenvalues.
 fn stable_sort_candidates(candidates: &mut [(f64, usize)]) {
     for sorted_end in 1..candidates.len() {
         let candidate = candidates[sorted_end];

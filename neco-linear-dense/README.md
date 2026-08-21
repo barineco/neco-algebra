@@ -2,7 +2,9 @@
 
 [日本語](README-ja.md)
 
-`neco-linear-dense` provides dense matrices for numerical linear algebra. Each matrix stores a validated shape and its elements in column-major order. Matrix-vector multiplication is available for `f64` values.
+`neco-linear-dense` provides dense matrices for numerical linear algebra.
+
+Each matrix stores a shape and exactly the corresponding number of elements in column-major order. Construction validates storage length, element-count capacity, representable storage length, and allocation. Matrix-vector multiplication for `f64` values validates the input-vector length.
 
 ## Public API
 

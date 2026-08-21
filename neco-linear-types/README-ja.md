@@ -6,11 +6,21 @@
 
 ## 公開 API
 
-- `Shape`: 行数と列数を保持し、要素数を検査
+- `Shape`: 行数と列数を保持し、要素数の容量超過を検査
 - `RowIndex`, `ColumnIndex`: 形状の検証を通して生成する添字
-- `Vector<T>`: ベクトルの値を保持し、長さと値を観測
-- `LinearOperator<T>`: ベクトルの入出力の長さと作用のシグネチャを定める trait。長さの検査は各実装が担います
+- `Vector<T>`: 値を所有し、長さ、要素、全要素を観測
+- `LinearOperator<T>`: 入力長、出力長、作用を定める線形作用素
 - `LinearError`: 次元、添字、格納長、容量、メモリ確保、格納状態の失敗
+
+線形作用素の公開シグネチャは次のとおりです。
+
+```text
+domain(&self) -> usize
+codomain(&self) -> usize
+apply(&self, input: &Vector<T>) -> Result<Vector<T>, LinearError>
+```
+
+入力と出力の長さは、各実装が検査します。
 
 ## ランタイム構成
 

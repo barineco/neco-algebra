@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-`neco-expr` は、厳密値を式グラフとして保持し、消費点 ( consumer ) ごとに保証付きの浮動小数点値へ解決する crate です。解決の結果には、有限な `f64` の値、要求した精度を満たす二進有理数の区間、厳密な絶対誤差の上限が揃います。浮動小数点への近似は解決の最終段だけで行い、途中の値は最後まで厳密なままです。
+`neco-expr` は、厳密値を式グラフとして保持し、消費点ごとに保証付きの浮動小数点値へ解決する crate です。解決の結果には、有限な `f64` の値、要求した精度を満たす二進有理数の区間、厳密な絶対誤差の上限が揃います。浮動小数点への近似は解決の最終段だけで行い、途中の値は最後まで厳密なままです。
 
 ## 利用例
 
@@ -135,19 +135,60 @@ upper - lower <= 2^(-bits)
 
 失敗の型は処理の段階ごとに分かれます。
 
-- `GraphError`: ID の枯渇、未追加の節への参照、節の複製、グラフの格納
-- `InsertError`: ID の重複、atom 値の複製、入力写像の格納
+- `GraphError`: 識別子の枯渇、未追加の節への参照、節の複製、グラフの格納
+- `InsertError`: 識別子の重複、atom 値の複製、入力写像の格納
 - `EvalError`: 零除算、零の冪、偶数根、下位 crate の失敗
-- `ResolveError`: 宣言の不足、未知の ID、有限範囲、評価、区間、結果の格納
+- `ResolveError`: 宣言の不足、未知の識別子、有限な表現域、評価、下位算術、結果の格納
 - `ScalarProjectionError`: 単独射影の表現域、下位 crate、格納の失敗
-- `StorageError`: 容量の超過、必要な総要素数を伴う確保の拒否
+- `StorageError`: 容量超過、必要な総要素数を伴うメモリ確保失敗
 
-下位の失敗と複製は次で扱います。
+区間計算の下位失敗は次の列挙子として伝搬します。
 
-- `std::error::Error::source`: 保持している下位の失敗を参照する
-- `try_clone`: 所有するデータを検査付きで複製する
+- `ResolveError::Bigint`: 二進有理数と区間の処理に由来する失敗
+- `ResolveError::Algnum`: 代数的数の区間処理に由来する失敗
 
-可変長のデータを所有する型の複製経路は `try_clone` です。
+下位の失敗と複製の入口は次のとおりです。
+
+- `std::error::Error::source`: 保持している下位の失敗を参照
+- `try_clone`: 所有するデータを検査付きで複製
+
+## 高水準の厳密計算
+
+高水準の処理は二つの所有者へ厳密計算と数値計算を割り当てます。下位の式グラフ API は、その入力として維持します。
+
+- Modal Field Projection
+- Wavesim
+
+主な入力値は次のとおりです。
+
+- `ReadExactNumericInput`: 二つの所有者から読み取った式グラフと atom
+- `ExactAllocationInput`: 外部観測の能力、実装由来、厳密入力
+- `ExactExpressionRequirement`: 一つの消費点、指定された式、型付き厳密判定、絶対精度
+- `NecoObservedCapability`: 外部観測から渡される能力
+- `NecoImplementationSource`: 外部観測から渡される実装由来
+
+処理は所有権を移しながら、次の順で値を変換します。
+
+1. `read_exact_numeric_inputs`: 二つの所有者の入力を読み取り結果へ変換
+2. `allocate_exact_numeric`: 全候補を三つの有限集合へ分類
+3. `normalize_exact_expressions`: 各所有者の式グラフを正規化
+4. `decide_exact_properties`: 要求された厳密判定を実行
+5. `resolve_certified_f64`: 要求された式を認証付き浮動小数点値へ解決
+6. `assemble_exact_computation_product`: 割り当て、要求、判定、認証付きの値を集約
+
+`ExactNumericAllocation` が保持する全量集合は次の三つです。
+
+- 厳密入力
+- 厳密判定
+- 数値演算
+
+`ExactComputationProduct` は各消費点へ認証付きの値を返します。同じ所有者の式グラフでは、同じ式と精度の要求が一回の解決を共有します。
+
+観測入口は次のとおりです。
+
+- `direct_inspection`: 割り当て、要求、型付き判定、認証付きの値、共有した解決の件数
+
+高水準の失敗は閉じた `NecoFailure` を使います。操作、消費点、式、atom、判定の位置を保持し、格納と下位算術の失敗を対応付けます。数値誤差予算は所有者が管理し、認証付き浮動小数点値の絶対誤差には加算しません。
 
 ## 構成と依存
 
@@ -158,7 +199,7 @@ upper - lower <= 2^(-bits)
 - `neco-formsum`
 - `neco-algnum`
 
-既定の `std` 機能は、標準エラー型との連携と、依存 crate の同名の機能を有効にします。既定機能を無効にすると `core + alloc` 構成になります。
+既定の `std` 機能は、標準エラー型との連携と、依存 crate の同名機能を有効にします。既定機能を無効にすると `core + alloc` 構成になります。
 
 ```bash
 cargo check -p neco-expr --no-default-features
@@ -167,27 +208,3 @@ cargo check -p neco-expr --no-default-features
 ## ライセンス
 
 MIT License です。
-
-## `ExactComputationProduct`
-
-高水準 API は、下位の式グラフ API を保ったまま、利用者へ厳密計算と数値計算の責務を割り当てます。
-
-- `ExactExpressionRequirement`: 利用者、指定された式の集合、型付き厳密判定、絶対精度の要求
-- `ExactNumericAllocation`: 厳密入力、厳密判定、数値演算、降下先、所有者別の数値誤差予算
-
-適用する操作は次の六つです。
-
-1. `read_exact_numeric_inputs`
-2. `allocate_exact_numeric`
-3. `normalize_exact_expressions`
-4. `decide_exact_properties`
-5. `resolve_certified_f64`
-6. `assemble_exact_computation_product`
-
-`ExactComputationProduct` は、各利用者へ保証付きの値を返します。同じ所有者の式グラフの中で、同じ式と精度の要求は一回の解決を共有します。
-
-`direct_inspection` は、割り当て、要求、型付き判定、保証付きの値、共有した解決の件数を直接公開します。
-
-### 高水準の失敗
-
-高水準の失敗は閉じた `NecoFailure` を使います。操作、利用者、式、atom、判定の位置を保持し、格納と下位算術の失敗を対応付けます。数値誤差予算は所有側が管理し、保証済み浮動小数点値の誤差には加算しません。

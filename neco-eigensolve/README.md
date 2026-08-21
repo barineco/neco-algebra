@@ -8,10 +8,12 @@
 
 - `EigensolveConfig`: requested mode count, tolerances, and iteration limit
 - `EigensolveError`: solver validation and allocation failures
-- `EigensolveRequest<R>`: problem, configuration, and consumer-owned projection reference
-- `EigensolveResult<R>`: eigenspaces, convergence status, spectral shift, and projection reference
+- `EigensolveRequest<R>`: owns the problem, configuration, and consumer projection reference
+- `EigensolveResult<R>`: owns eigenspaces, convergence status, spectral shift, and the moved projection reference
 - `solve_symmetric_f64`: dense real symmetric problems
-- `solve_request_symmetric_f64`: owned request with reference propagation
+- `solve_request_symmetric_f64`: consumes a request and moves its projection reference into the result
+- `projection_reference`: borrows the projection reference from a request or result
+- `into_projection_reference`: returns the owned projection reference from a result
 - `solve_csr_symmetric_f64`: CSR real symmetric problems
 
 ## Engine

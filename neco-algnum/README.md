@@ -98,10 +98,31 @@ Addition, subtraction, multiplication, division, powers, and roots proceed throu
 - `Bigint`: the preserved variant and payload from `neco-bigint`
 - `FormSum`: the preserved variant and payload from `neco-formsum`
 
-Two supporting types classify the failing subject:
+Two supporting types classify the failing subject.
 
-- `RepresentationResource`: root degree, polynomial degree, coefficient count, Sylvester dimension, and Sylvester element count
-- `AllocationResource`: stored coefficients, factors, Sturm sequences, root intervals, Sylvester elements, permutations, resultant coefficients, and related collections
+`RepresentationResource` distinguishes these representation limits:
+
+- root degree
+- polynomial degree
+- coefficient count
+- Sylvester matrix dimension
+- Sylvester matrix element count
+
+`AllocationResource` distinguishes these allocation subjects:
+
+- polynomial coefficients
+- rational coefficients
+- evaluation points
+- divisors
+- product limbs
+- factor candidates
+- factors
+- Sturm sequences
+- root intervals
+- Sylvester matrix elements
+- permutations
+- resultant coefficients
+- root candidates
 
 Storage failures split into two cases: the exact total element count exceeds the platform limit, or the allocator refuses a request within that limit.
 

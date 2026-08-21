@@ -609,6 +609,8 @@ where
         })
     }
 
+    /// Scans columns from left to right and selects the first nonzero row at or
+    /// below the pivot row.
     fn eliminate(&self, rhs: Option<&Vector<T>>) -> Result<Elimination<T>, ExactLinearError> {
         let rows = self.rows();
         let columns = self.columns();

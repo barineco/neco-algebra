@@ -359,24 +359,20 @@ impl LinearOperator<f64> for EigenProjector {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[non_exhaustive]
-pub enum ConvergenceStatus {
-    Converged {
-        iterations: usize,
-        requested_modes: usize,
-        returned_modes: usize,
-        converged_modes: usize,
-        absolute_tolerance: f64,
-        relative_tolerance: f64,
-    },
-    IterationLimit {
-        iterations: usize,
-        requested_modes: usize,
-        returned_modes: usize,
-        converged_modes: usize,
-        absolute_tolerance: f64,
-        relative_tolerance: f64,
-    },
+pub struct ConvergenceStatus {
+    kind: ConvergenceKind,
+    iterations: usize,
+    requested_modes: usize,
+    returned_modes: usize,
+    converged_modes: usize,
+    absolute_tolerance: f64,
+    relative_tolerance: f64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ConvergenceKind {
+    Converged,
+    IterationLimit,
 }
 
 impl ConvergenceStatus {
@@ -394,7 +390,8 @@ impl ConvergenceStatus {
                 reason: "converged modes must equal returned modes when converged",
             });
         }
-        Ok(Self::Converged {
+        Ok(Self {
+            kind: ConvergenceKind::Converged,
             iterations,
             requested_modes,
             returned_modes,
@@ -418,7 +415,8 @@ impl ConvergenceStatus {
                 reason: "converged modes must not exceed returned modes",
             });
         }
-        Ok(Self::IterationLimit {
+        Ok(Self {
+            kind: ConvergenceKind::IterationLimit,
             iterations,
             requested_modes,
             returned_modes,
@@ -426,6 +424,34 @@ impl ConvergenceStatus {
             absolute_tolerance,
             relative_tolerance,
         })
+    }
+
+    pub fn is_converged(&self) -> bool {
+        self.kind == ConvergenceKind::Converged
+    }
+
+    pub fn iterations(&self) -> usize {
+        self.iterations
+    }
+
+    pub fn requested_modes(&self) -> usize {
+        self.requested_modes
+    }
+
+    pub fn returned_modes(&self) -> usize {
+        self.returned_modes
+    }
+
+    pub fn converged_modes(&self) -> usize {
+        self.converged_modes
+    }
+
+    pub fn absolute_tolerance(&self) -> f64 {
+        self.absolute_tolerance
+    }
+
+    pub fn relative_tolerance(&self) -> f64 {
+        self.relative_tolerance
     }
 }
 
@@ -784,27 +810,23 @@ mod tests {
             ConvergenceStatus::converged(4, 2, 2, 2, -1.0, 1.0e-8),
             Err(GeneralizedEigenError::InvalidEigenpair { .. })
         ));
-        assert!(matches!(
-            ConvergenceStatus::converged(4, 1, 2, 2, 1.0e-8, 1.0e-8),
-            Ok(ConvergenceStatus::Converged {
-                requested_modes: 1,
-                returned_modes: 2,
-                converged_modes: 2,
-                ..
-            })
-        ));
+        let converged = ConvergenceStatus::converged(4, 1, 2, 2, 1.0e-8, 2.0e-8).expect("status");
+        assert!(converged.is_converged());
+        assert_eq!(converged.iterations(), 4);
+        assert_eq!(converged.requested_modes(), 1);
+        assert_eq!(converged.returned_modes(), 2);
+        assert_eq!(converged.converged_modes(), 2);
+        assert_eq!(converged.absolute_tolerance(), 1.0e-8);
+        assert_eq!(converged.relative_tolerance(), 2.0e-8);
         assert!(matches!(
             ConvergenceStatus::converged(4, 2, 2, 1, 1.0e-8, 1.0e-8),
             Err(GeneralizedEigenError::InvalidConvergenceStatus { .. })
         ));
-        assert!(matches!(
-            ConvergenceStatus::iteration_limit(4, 2, 2, 1, 1.0e-8, 1.0e-8),
-            Ok(ConvergenceStatus::IterationLimit {
-                returned_modes: 2,
-                converged_modes: 1,
-                ..
-            })
-        ));
+        let limited =
+            ConvergenceStatus::iteration_limit(4, 2, 2, 1, 1.0e-8, 1.0e-8).expect("status");
+        assert!(!limited.is_converged());
+        assert_eq!(limited.returned_modes(), 2);
+        assert_eq!(limited.converged_modes(), 1);
         assert!(matches!(
             ConvergenceStatus::iteration_limit(4, 2, 1, 2, 1.0e-8, 1.0e-8),
             Err(GeneralizedEigenError::InvalidConvergenceStatus { .. })

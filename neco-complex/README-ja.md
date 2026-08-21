@@ -2,12 +2,12 @@
 
 [English](README.md)
 
-`neco-complex` は数値線形代数と信号処理の複素スカラーを提供します。実部と虚部は private なフィールドとし、算術、共役、ノルム、偏角を提供します。
+`neco-complex` は、数値線形代数と信号処理に使う複素スカラーを提供します。実部と虚部は private なフィールドです。構築時には成分の有限性や、後続の零除算を検証しません。算術は成分型の演算を使い、検証失敗を返さない形です。
 
 ## 公開 API
 
-- `Complex<T>`: private な成分を保持し、アクセサーで観測する複素スカラー
-- `Complex::new(re, im)`: 複素 スカラーを構築
+- `Complex<T>`: private な成分を保持し、アクセサで観測する複素スカラー
+- `Complex::new(re, im)`: 任意の実部と虚部をそのまま保持
 - `Complex::real`: 実部を参照として観測
 - `Complex::imaginary`: 虚部を参照として観測
 - `Complex::real_value`: 実部の値を返す

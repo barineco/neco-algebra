@@ -11,7 +11,7 @@
 - `GeneralizedEigenProblem::from_csr`: checked CSR-to-dense conversion
 - `EigenResidual`: absolute and relative residual
 - `Eigenpair`: validated eigenvalue, vector, and residual
-- `Eigenspace`: a mass-orthonormal basis for one eigenvalue of the given problem
+- `Eigenspace`: a mass-orthonormal basis for one eigenvalue of the given problem; construction recomputes residuals from that problem and validates mass norms and mutual orthogonality
 - `EigenProjector`: mass-metric eigenspace projection
 - `ConvergenceStatus`: solver progress metadata, constructible only through validated constructors
 - `EigenShift`: finite `Complex<f64>` spectral shift

@@ -2,7 +2,7 @@
 
 [日本語](README-ja.md)
 
-`neco algebra` is a set of Rust crates for exact arithmetic over algebraic numbers. A number stays an expression while it is computed with, and the descent to a floating-point approximation happens once, at the very end, carrying an explicit error bound.
+`neco algebra` is a set of Rust crates for exact arithmetic over algebraic numbers. A number remains an expression during computation and is converted to a floating-point approximation only once, at the end, with an explicit error bound.
 
 Every decision runs on normal forms. Whether a value is zero, and whether two values are equal, is settled by comparing the structure of their normal forms. For example, the identity
 

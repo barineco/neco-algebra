@@ -96,16 +96,39 @@ Sturm 列はすべての実根を、それぞれ異なる根を一つずつ含�
 - `EvenRootOfNegative`: 負数の偶数根
 - `RepresentationLimit`: 次数、係数の数、Sylvester 行列が表現上限を超過
 - `AllocationLimit`: 必要な総要素数の厳密な見積もりが `usize` の上限を超過
-- `AllocationFailure`: アロケーター による確保の拒否。対象の資源と要求要素数を保持
-- `Bigint`: `neco-bigint` の失敗を variant と内容ごと保持
-- `FormSum`: `neco-formsum` の失敗を variant と内容ごと保持
+- `AllocationFailure`: アロケータによる確保の拒否。対象の資源と要求要素数を保持
+- `Bigint`: `neco-bigint` の失敗を列挙子と内容ごと保持
+- `FormSum`: `neco-formsum` の失敗を列挙子と内容ごと保持
 
-補助の型は失敗の対象を細かく区別します。
+### 表現上限の対象
 
-- `RepresentationResource`: 根の次数、多項式の次数、係数の数、Sylvester 行列の辺長と要素数
-- `AllocationResource`: 係数、因子、Sturm 列、根の区間、行列、置換、終結式などの格納対象
+`RepresentationResource` は次の対象を区別します。
 
-格納に関する失敗は二つの場合に分かれます。必要な総要素数の厳密な見積もりがプラットフォームの上限を超える場合と、上限の内側でも アロケーター が確保を拒否する場合です。
+- 根の次数
+- 多項式の次数
+- 係数の数
+- Sylvester 行列の辺長
+- Sylvester 行列の要素数
+
+### メモリ確保の対象
+
+`AllocationResource` は次の種類を区別します。
+
+- 多項式係数
+- 有理係数
+- 評価点
+- 約数
+- 積の桁
+- 因子候補
+- 因子
+- Sturm 列
+- 根の区間
+- Sylvester 行列の要素
+- 置換
+- 終結式の係数
+- 根の候補
+
+格納に関する失敗は、総要素数がプラットフォームの上限を超える場合と、上限内の要求をアロケータが拒否する場合の二種類です。
 
 可変長の値を所有する公開型は `try_clone` を提供し、確保の失敗を `Result` で返します。
 

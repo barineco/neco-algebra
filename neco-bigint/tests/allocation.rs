@@ -4,23 +4,23 @@ use std::alloc::System;
 
 use neco_bigint::{BigInt, BigUint, BigintError, Dyadic, RawRational};
 
+/// Satisfies `GlobalAlloc` safety requirements by delegating each successful
+/// request to `System` with the same `Layout` and deallocating its returned
+/// pointer through `System` with that same `Layout`.
 struct FailNextAllocator;
 
 static FAIL_NEXT: AtomicBool = AtomicBool::new(false);
 
-// SAFETY: Requests selected for success are delegated unchanged to System.
 unsafe impl GlobalAlloc for FailNextAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         if FAIL_NEXT.swap(false, Ordering::SeqCst) {
             core::ptr::null_mut()
         } else {
-            // SAFETY: The caller supplied a layout satisfying GlobalAlloc requirements.
             unsafe { System.alloc(layout) }
         }
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        // SAFETY: Successful allocations above come from System with this layout.
         unsafe { System.dealloc(ptr, layout) }
     }
 }

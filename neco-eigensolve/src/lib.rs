@@ -195,31 +195,28 @@ impl<R> EigensolveResult<R> {
                 },
             )?;
         }
-        let (reported_modes, converged_modes) = match convergence {
-            ConvergenceStatus::Converged {
-                returned_modes,
-                converged_modes,
-                ..
-            }
-            | ConvergenceStatus::IterationLimit {
-                returned_modes,
-                converged_modes,
-                ..
-            } => (returned_modes, converged_modes),
-            _ => {
-                return Err(EigensolveError::InvalidResult {
-                    reason: "unsupported convergence status",
-                });
-            }
-        };
+        let reported_modes = convergence.returned_modes();
+        let converged_modes = convergence.converged_modes();
         if reported_modes != returned_modes {
             return Err(EigensolveError::InvalidResult {
                 reason: "convergence metadata must equal returned eigenspace modes",
             });
         }
-        if converged_modes > returned_modes {
+        if converged_modes > reported_modes {
             return Err(EigensolveError::InvalidResult {
                 reason: "converged mode count exceeds returned mode count",
+            });
+        }
+        if !is_finite_nonnegative(convergence.absolute_tolerance())
+            || !is_finite_nonnegative(convergence.relative_tolerance())
+        {
+            return Err(EigensolveError::InvalidResult {
+                reason: "convergence tolerances must be finite and non-negative",
+            });
+        }
+        if convergence.is_converged() && converged_modes != reported_modes {
+            return Err(EigensolveError::InvalidResult {
+                reason: "converged status requires every returned mode to converge",
             });
         }
         Ok(Self {
@@ -494,6 +491,8 @@ fn convergence_threshold(
     Ok(config.absolute_tolerance + config.relative_tolerance * maximum_diagonal)
 }
 
+/// Uses the sign of `tau` to select the smaller-magnitude rotation
+/// deterministically.
 fn jacobi_rotate(
     matrix: &mut [f64],
     eigenvectors: &mut [f64],
@@ -617,6 +616,8 @@ fn stable_insertion_sort(order: &mut [usize], diagonalized: &[f64], dimension: u
     }
 }
 
+/// Orders eigenvalues with `total_cmp` and resolves ties by original column
+/// index.
 fn eigenvalue_ordering(
     left: usize,
     right: usize,
@@ -646,6 +647,8 @@ fn residual_converged(pair: &Eigenpair, config: &EigensolveConfig) -> bool {
     }
 }
 
+/// Makes the first maximum-magnitude component positive to canonicalize the
+/// eigenvector sign.
 fn canonicalize_column(
     eigenvectors: &mut [f64],
     dimension: usize,
@@ -760,10 +763,10 @@ mod tests {
     use super::{
         jacobi_workspace, largest_off_diagonal, solve_csr_symmetric_f64,
         solve_request_symmetric_f64, solve_symmetric_f64, ConvergenceStatus, EigensolveConfig,
-        EigensolveError, EigensolveRequest,
+        EigensolveError, EigensolveRequest, EigensolveResult,
     };
     use neco_complex::Complex;
-    use neco_generalized_eigen::{EigenResidual, GeneralizedEigenProblem};
+    use neco_generalized_eigen::{EigenResidual, EigenShift, GeneralizedEigenProblem};
     use neco_linear_dense::DenseMatrix;
     use neco_linear_types::{Shape, Vector};
     use neco_sparse::{CooMatrix, CsrMatrix};
@@ -848,17 +851,60 @@ mod tests {
 
         assert_eq!(result.eigenspaces().len(), 1);
         assert_eq!(result.eigenspaces()[0].basis().len(), 2);
-        assert_eq!(
-            result.convergence(),
-            ConvergenceStatus::Converged {
-                iterations: 0,
-                requested_modes: 1,
-                returned_modes: 2,
-                converged_modes: 2,
-                absolute_tolerance: 1.0e-12,
-                relative_tolerance: 1.0e-12,
-            }
-        );
+        let convergence = result.convergence();
+        assert!(convergence.is_converged());
+        assert_eq!(convergence.iterations(), 0);
+        assert_eq!(convergence.requested_modes(), 1);
+        assert_eq!(convergence.returned_modes(), 2);
+        assert_eq!(convergence.converged_modes(), 2);
+        assert_eq!(convergence.absolute_tolerance(), 1.0e-12);
+        assert_eq!(convergence.relative_tolerance(), 1.0e-12);
+    }
+
+    #[test]
+    fn result_constructor_accepts_valid_statuses_and_projection_reference() {
+        let result = EigensolveResult::from_projected_parts(
+            solve_symmetric_f64(&diagonal_problem(), config())
+                .expect("solved result")
+                .eigenspaces()
+                .to_vec(),
+            ConvergenceStatus::converged(0, 3, 3, 3, 1.0e-12, 1.0e-12).expect("status"),
+            EigenShift::new(Complex::<f64>::zero()).expect("shift"),
+            "projection",
+        )
+        .expect("valid result");
+        assert_eq!(result.projection_reference(), &"projection");
+        assert!(result.convergence().is_converged());
+    }
+
+    #[test]
+    fn result_constructor_rejects_status_mode_count_mismatches() {
+        let eigenspaces = solve_symmetric_f64(&diagonal_problem(), config())
+            .expect("solved result")
+            .eigenspaces()
+            .to_vec();
+        let shift = EigenShift::new(Complex::<f64>::zero()).expect("shift");
+
+        assert!(matches!(
+            EigensolveResult::from_parts(
+                eigenspaces.clone(),
+                ConvergenceStatus::converged(0, 3, 2, 2, 1.0e-12, 1.0e-12).expect("status"),
+                shift,
+            ),
+            Err(EigensolveError::InvalidResult {
+                reason: "convergence metadata must equal returned eigenspace modes"
+            })
+        ));
+        assert!(matches!(
+            EigensolveResult::from_parts(
+                eigenspaces,
+                ConvergenceStatus::iteration_limit(0, 3, 3, 2, 1.0e-12, 1.0e-12)
+                    .expect("status"),
+                shift,
+            ),
+            Ok(result) if !result.convergence().is_converged()
+                && result.convergence().converged_modes() <= result.convergence().returned_modes()
+        ));
     }
 
     #[test]
@@ -933,16 +979,12 @@ mod tests {
         .expect("problem");
         let limited = EigensolveConfig::new(3, 0.0, 0.0, 1).expect("config");
         let result = solve_symmetric_f64(&problem, limited).expect("partial result");
-        assert!(matches!(
-            result.convergence(),
-            ConvergenceStatus::IterationLimit {
-                iterations: 1,
-                requested_modes: 3,
-                returned_modes: 3,
-                converged_modes: 0,
-                ..
-            }
-        ));
+        let convergence = result.convergence();
+        assert!(!convergence.is_converged());
+        assert_eq!(convergence.iterations(), 1);
+        assert_eq!(convergence.requested_modes(), 3);
+        assert_eq!(convergence.returned_modes(), 3);
+        assert_eq!(convergence.converged_modes(), 0);
         assert!(!result.eigenspaces().is_empty());
     }
 
@@ -984,14 +1026,11 @@ mod tests {
 
         let config = EigensolveConfig::new(3, absolute_tolerance, 0.0, 1).expect("config");
         let result = solve_symmetric_f64(&problem, config).expect("result");
-        match result.convergence() {
-            ConvergenceStatus::Converged {
-                returned_modes,
-                converged_modes,
-                ..
-            } => assert_eq!(converged_modes, returned_modes),
-            ConvergenceStatus::IterationLimit { .. } => {}
-            _ => panic!("unsupported convergence status"),
+        let convergence = result.convergence();
+        if convergence.is_converged() {
+            assert_eq!(convergence.converged_modes(), convergence.returned_modes());
+        } else {
+            assert!(convergence.converged_modes() <= convergence.returned_modes());
         }
     }
 
