@@ -69,19 +69,24 @@ flowchart LR
 
 ## Crates
 
-- [`neco-bigint`](neco-bigint): arbitrary-precision naturals, integers, rationals, dyadic rationals, and validated dyadic enclosures.
-- [`neco-monomial`](neco-monomial): monomials with rational exponents that represent radicals exactly.
-- [`neco-formsum`](neco-formsum): rational linear combinations of normalized monomials.
-- [`neco-algnum`](neco-algnum): real algebraic numbers identified by a minimal polynomial and a real-root index.
-- [`neco-expr`](neco-expr): expression graphs resolved to certified floating-point values.
-- [`neco-complex`](neco-complex): complex scalars for numerical linear algebra and signal processing.
-- [`neco-linear-types`](neco-linear-types): shapes, vectors, and linear operators.
-- [`neco-linear-dense`](neco-linear-dense): dense matrices for numerical linear algebra.
-- [`neco-sparse`](neco-sparse): sparse matrices and COO-to-CSR conversion.
-- [`neco-generalized-eigen`](neco-generalized-eigen): validated types for generalized eigenvalue problems, eigenspaces, projectors, and convergence states.
-- [`neco-eigensolve`](neco-eigensolve): deterministic Jacobi eigensolvers for real symmetric problems with identity mass matrices.
-- [`neco-eigensolve-faer`](neco-eigensolve-faer): a `faer` adapter for positive-definite mass matrices.
-- [`neco-linear-exact`](neco-linear-exact): exact matrices, Gaussian elimination, and linear-system solutions over rational, radical, and real algebraic values.
+- [`neco-bigint`](https://crates.io/crates/neco-bigint): arbitrary-precision naturals, integers, rationals, dyadic rationals, and validated dyadic enclosures.
+- [`neco-monomial`](https://crates.io/crates/neco-monomial): monomials with rational exponents that represent radicals exactly.
+- [`neco-formsum`](https://crates.io/crates/neco-formsum): rational linear combinations of normalized monomials.
+- [`neco-algnum`](https://crates.io/crates/neco-algnum): real algebraic numbers identified by a minimal polynomial and a real-root index.
+- [`neco-expr`](https://crates.io/crates/neco-expr): expression graphs resolved to certified floating-point values.
+- [`neco-complex`](https://crates.io/crates/neco-complex): complex scalars for numerical linear algebra and signal processing.
+- [`neco-linear-types`](https://crates.io/crates/neco-linear-types): shapes, vectors, and linear operators.
+- [`neco-linear-dense`](https://crates.io/crates/neco-linear-dense): dense matrices for numerical linear algebra.
+- [`neco-sparse`](https://crates.io/crates/neco-sparse): sparse matrices and COO-to-CSR conversion.
+- [`neco-generalized-eigen`](https://crates.io/crates/neco-generalized-eigen): validated types for generalized eigenvalue problems, eigenspaces, projectors, and convergence states.
+- [`neco-eigensolve`](https://crates.io/crates/neco-eigensolve): deterministic Jacobi eigensolvers for real symmetric problems with identity mass matrices.
+- [`neco-eigensolve-faer`](https://crates.io/crates/neco-eigensolve-faer): a `faer` adapter for positive-definite mass matrices.
+- [`neco-linear-exact`](https://crates.io/crates/neco-linear-exact): exact matrices, Gaussian elimination, and linear-system solutions over rational, radical, and real algebraic values.
+
+## Repositories using this repository
+
+- [`neco-calculus`](https://github.com/barineco/neco-calculus): exact polynomial calculus.
+- [`neco-geometry`](https://github.com/barineco/neco-geometry): exact algebraic geometry computation.
 
 Runtime configurations:
 

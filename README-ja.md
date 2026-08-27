@@ -69,19 +69,24 @@ flowchart LR
 
 ## crate 一覧
 
-- [`neco-bigint`](neco-bigint): 任意精度の自然数・整数・有理数、二進有理数、検証済みの包含区間
-- [`neco-monomial`](neco-monomial): 有理数指数を持つ単項式による冪根の厳密表現
-- [`neco-formsum`](neco-formsum): 正規化した単項式の有理係数和
-- [`neco-algnum`](neco-algnum): 最小多項式と実根番号で同定する実代数的数
-- [`neco-expr`](neco-expr): 誤差上限付き浮動小数点値への式グラフ解決
-- [`neco-complex`](neco-complex): 数値線形代数と信号処理の複素スカラー
-- [`neco-linear-types`](neco-linear-types): 形状、ベクトル、線形作用素
-- [`neco-linear-dense`](neco-linear-dense): 数値線形代数の密行列
-- [`neco-sparse`](neco-sparse): 疎行列と COO から CSR への変換
-- [`neco-generalized-eigen`](neco-generalized-eigen): 一般化固有値問題、固有空間、射影、収束状態の検証済み型
-- [`neco-eigensolve`](neco-eigensolve): 単位質量行列を持つ実対称問題の決定的 Jacobi 固有値計算
-- [`neco-eigensolve-faer`](neco-eigensolve-faer): 正定値質量行列を扱う `faer` アダプター
-- [`neco-linear-exact`](neco-linear-exact): 有理数、冪根、実代数的数に対する厳密行列、ガウス消去法、連立一次方程式の解
+- [`neco-bigint`](https://crates.io/crates/neco-bigint): 任意精度の自然数・整数・有理数、二進有理数、検証済みの包含区間
+- [`neco-monomial`](https://crates.io/crates/neco-monomial): 有理数指数を持つ単項式による冪根の厳密表現
+- [`neco-formsum`](https://crates.io/crates/neco-formsum): 正規化した単項式の有理係数和
+- [`neco-algnum`](https://crates.io/crates/neco-algnum): 最小多項式と実根番号で同定する実代数的数
+- [`neco-expr`](https://crates.io/crates/neco-expr): 誤差上限付き浮動小数点値への式グラフ解決
+- [`neco-complex`](https://crates.io/crates/neco-complex): 数値線形代数と信号処理の複素スカラー
+- [`neco-linear-types`](https://crates.io/crates/neco-linear-types): 形状、ベクトル、線形作用素
+- [`neco-linear-dense`](https://crates.io/crates/neco-linear-dense): 数値線形代数の密行列
+- [`neco-sparse`](https://crates.io/crates/neco-sparse): 疎行列と COO から CSR への変換
+- [`neco-generalized-eigen`](https://crates.io/crates/neco-generalized-eigen): 一般化固有値問題、固有空間、射影、収束状態の検証済み型
+- [`neco-eigensolve`](https://crates.io/crates/neco-eigensolve): 単位質量行列を持つ実対称問題の決定的 Jacobi 固有値計算
+- [`neco-eigensolve-faer`](https://crates.io/crates/neco-eigensolve-faer): 正定値質量行列を扱う `faer` アダプター
+- [`neco-linear-exact`](https://crates.io/crates/neco-linear-exact): 有理数、冪根、実代数的数に対する厳密行列、ガウス消去法、連立一次方程式の解
+
+## 本リポジトリを利用するリポジトリ
+
+- [`neco-calculus`](https://github.com/barineco/neco-calculus): 厳密な多項式微積分
+- [`neco-geometry`](https://github.com/barineco/neco-geometry): 厳密な代数幾何計算
 
 既定の構成は次のとおりです。
 
