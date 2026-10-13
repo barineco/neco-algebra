@@ -1,6 +1,6 @@
 [package]
 name = "neco-monomial"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -28,4 +28,4 @@ default = ["std"]
 std = ["neco-bigint/std"]
 
 [dependencies]
-neco-bigint = { path = "../neco-bigint", version = "=0.1.1", default-features = false }
+neco-bigint = { path = "../neco-bigint", version = "=0.1.2", default-features = false }

@@ -1,6 +1,6 @@
 [package]
 name = "neco-linear-exact"
-version = "0.1.2"
+version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -24,9 +24,9 @@ std = [
 ]
 
 [dependencies]
-neco-linear-types = { path = "../neco-linear-types", version = "=0.1.0", default-features = false }
-neco-linear-dense = { path = "../neco-linear-dense", version = "=0.1.0", default-features = false }
-neco-bigint = { path = "../neco-bigint", version = "=0.1.1", default-features = false }
-neco-formsum = { path = "../neco-formsum", version = "=0.1.1", default-features = false }
-neco-algnum = { path = "../neco-algnum", version = "=0.1.1", default-features = false }
-neco-expr = { path = "../neco-expr", version = "=0.1.2", default-features = false }
+neco-linear-types = { path = "../neco-linear-types", version = "=0.1.1", default-features = false }
+neco-linear-dense = { path = "../neco-linear-dense", version = "=0.1.1", default-features = false }
+neco-bigint = { path = "../neco-bigint", version = "=0.1.2", default-features = false }
+neco-formsum = { path = "../neco-formsum", version = "=0.1.2", default-features = false }
+neco-algnum = { path = "../neco-algnum", version = "=0.1.2", default-features = false }
+neco-expr = { path = "../neco-expr", version = "=0.2.0", default-features = false }

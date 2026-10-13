@@ -24,7 +24,7 @@ fn signed_coefficients(value: &Polynomial) -> Vec<(Sign, u32)> {
 }
 
 #[test]
-fn f0_factorization_vectors_match_all_terminal_coefficients() {
+fn factorization_vectors_match_all_terminal_coefficients() {
     let quartic = polynomial(&[6, 0, -5, 0, 1]);
     let factors = quartic
         .candidate()
@@ -58,7 +58,7 @@ fn f0_factorization_vectors_match_all_terminal_coefficients() {
 }
 
 #[test]
-fn f0_root_vector_returns_three_sorted_exact_values() {
+fn root_vector_returns_three_sorted_exact_values() {
     let roots = polynomial(&[0, -1, 0, 1])
         .candidate()
         .unwrap()

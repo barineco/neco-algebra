@@ -1,0 +1,267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neco.example/schema/algebra-observation-batch.v1.json",
+  "$defs": {
+    "decimalInteger": { "type": "string", "pattern": "^(0|-?[1-9][0-9]*)$" },
+    "unsignedDecimalInteger": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" },
+    "positiveDecimalInteger": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+    "f64Bits": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+    "dyadic": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "integer": { "$ref": "#/$defs/decimalInteger" },
+        "exponent": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      },
+      "required": ["integer", "exponent"]
+    },
+    "rational": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "numerator": { "$ref": "#/$defs/decimalInteger" },
+        "denominator": { "$ref": "#/$defs/positiveDecimalInteger" }
+      },
+      "required": ["numerator", "denominator"]
+    },
+    "rationalVector": { "type": "array", "items": { "$ref": "#/$defs/rational" } },
+    "rationalMatrix": { "type": "array", "items": { "$ref": "#/$defs/rationalVector" } },
+    "decimalVector": { "type": "array", "items": { "$ref": "#/$defs/decimalInteger" } },
+    "failureObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "failure" },
+        "failure": {
+          "type": "string",
+          "enum": [
+            "zero-denominator",
+            "division-by-zero",
+            "non-invertible",
+            "no-local-root",
+            "non-finite-f64",
+            "dimension-mismatch",
+            "singular-system"
+          ]
+        }
+      },
+      "required": ["kind", "failure"]
+    },
+    "rationalReductionInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "numerator": { "$ref": "#/$defs/decimalInteger" },
+        "denominator": { "$ref": "#/$defs/unsignedDecimalInteger" }
+      },
+      "required": ["numerator", "denominator"]
+    },
+    "rationalReductionValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "numerator": { "$ref": "#/$defs/decimalInteger" },
+        "denominator": { "$ref": "#/$defs/positiveDecimalInteger" }
+      },
+      "required": ["numerator", "denominator"]
+    },
+    "extendedGcdInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "left": { "$ref": "#/$defs/decimalInteger" },
+        "right": { "$ref": "#/$defs/decimalInteger" }
+      },
+      "required": ["left", "right"]
+    },
+    "extendedGcdValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gcd": { "$ref": "#/$defs/decimalInteger" },
+        "bezoutLeft": { "$ref": "#/$defs/decimalInteger" },
+        "bezoutRight": { "$ref": "#/$defs/decimalInteger" }
+      },
+      "required": ["gcd", "bezoutLeft", "bezoutRight"]
+    },
+    "localRootInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "polynomial": { "$ref": "#/$defs/decimalVector" } },
+      "required": ["polynomial"]
+    },
+    "localRootValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "left": { "$ref": "#/$defs/dyadic" },
+        "right": { "$ref": "#/$defs/dyadic" }
+      },
+      "required": ["left", "right"]
+    },
+    "scalarProjectionInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": { "$ref": "#/$defs/dyadic" },
+        "bits": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      },
+      "required": ["value", "bits"]
+    },
+    "scalarProjectionValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bits": { "$ref": "#/$defs/f64Bits" },
+        "lower": { "$ref": "#/$defs/dyadic" },
+        "upper": { "$ref": "#/$defs/dyadic" },
+        "absoluteError": { "$ref": "#/$defs/dyadic" }
+      },
+      "required": ["bits", "lower", "upper", "absoluteError"]
+    },
+    "linearInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "matrix": { "$ref": "#/$defs/rationalMatrix" },
+        "rhs": { "$ref": "#/$defs/rationalVector" }
+      },
+      "required": ["matrix", "rhs"]
+    },
+    "linearUniqueValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "solution": { "$ref": "#/$defs/rationalVector" } },
+      "required": ["solution"]
+    },
+    "linearAffineValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "particular": { "$ref": "#/$defs/rationalVector" },
+        "basis": { "type": "array", "items": { "$ref": "#/$defs/rationalVector" } }
+      },
+      "required": ["particular", "basis"]
+    },
+    "successObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "kind": { "const": "success" }, "value": true },
+      "required": ["kind", "value"]
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "caseId": { "type": "string", "minLength": 1 },
+        "operation": {
+          "type": "string",
+          "enum": [
+            "rational-reduction",
+            "extended-gcd-bezout",
+            "local-algebraic-root",
+            "scalar-f64-projection",
+            "rational-linear-unique",
+            "rational-linear-affine"
+          ]
+        },
+        "input": { "type": "object" },
+        "observation": { "type": "object" }
+      },
+      "required": ["caseId", "operation", "input", "observation"],
+      "allOf": [
+        {
+          "if": { "properties": { "operation": { "const": "rational-reduction" } } },
+          "then": {
+            "properties": {
+              "input": { "$ref": "#/$defs/rationalReductionInput" },
+              "observation": {
+                "oneOf": [
+                  { "$ref": "#/$defs/failureObservation" },
+                  { "allOf": [{ "$ref": "#/$defs/successObservation" }, { "properties": { "value": { "$ref": "#/$defs/rationalReductionValue" } } }] }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "operation": { "const": "extended-gcd-bezout" } } },
+          "then": {
+            "properties": {
+              "input": { "$ref": "#/$defs/extendedGcdInput" },
+              "observation": {
+                "oneOf": [
+                  { "$ref": "#/$defs/failureObservation" },
+                  { "allOf": [{ "$ref": "#/$defs/successObservation" }, { "properties": { "value": { "$ref": "#/$defs/extendedGcdValue" } } }] }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "operation": { "const": "local-algebraic-root" } } },
+          "then": {
+            "properties": {
+              "input": { "$ref": "#/$defs/localRootInput" },
+              "observation": {
+                "oneOf": [
+                  { "$ref": "#/$defs/failureObservation" },
+                  { "allOf": [{ "$ref": "#/$defs/successObservation" }, { "properties": { "value": { "$ref": "#/$defs/localRootValue" } } }] }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "operation": { "const": "scalar-f64-projection" } } },
+          "then": {
+            "properties": {
+              "input": { "$ref": "#/$defs/scalarProjectionInput" },
+              "observation": {
+                "oneOf": [
+                  { "$ref": "#/$defs/failureObservation" },
+                  { "allOf": [{ "$ref": "#/$defs/successObservation" }, { "properties": { "value": { "$ref": "#/$defs/scalarProjectionValue" } } }] }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "operation": { "const": "rational-linear-unique" } } },
+          "then": {
+            "properties": {
+              "input": { "$ref": "#/$defs/linearInput" },
+              "observation": {
+                "oneOf": [
+                  { "$ref": "#/$defs/failureObservation" },
+                  { "allOf": [{ "$ref": "#/$defs/successObservation" }, { "properties": { "value": { "$ref": "#/$defs/linearUniqueValue" } } }] }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "operation": { "const": "rational-linear-affine" } } },
+          "then": {
+            "properties": {
+              "input": { "$ref": "#/$defs/linearInput" },
+              "observation": {
+                "oneOf": [
+                  { "$ref": "#/$defs/failureObservation" },
+                  { "allOf": [{ "$ref": "#/$defs/successObservation" }, { "properties": { "value": { "$ref": "#/$defs/linearAffineValue" } } }] }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "neco.algebra.observation-batch.v1" },
+    "cases": { "type": "array", "items": { "$ref": "#/$defs/case" } }
+  },
+  "required": ["schema", "cases"]
+}

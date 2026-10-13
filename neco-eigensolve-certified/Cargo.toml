@@ -1,0 +1,28 @@
+[package]
+name = "neco-eigensolve-certified"
+version = "0.2.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "certified forward-error bounds and frequency enclosures for generalized eigenvalue problems"
+documentation = "https://docs.rs/neco-eigensolve-certified"
+readme = "README.md"
+keywords = ["eigenvalue", "certified", "error-bound", "numerics"]
+categories = ["mathematics"]
+include = ["Cargo.toml", "src/*.rs", "README.md", "README-ja.md", "LICENSE"]
+
+[dependencies]
+neco-bigint = { path = "../neco-bigint", version = "=0.1.2" }
+neco-eigensolve = { path = "../neco-eigensolve", version = "=0.2.3" }
+neco-eigensolve-faer = { path = "../neco-eigensolve-faer", version = "=0.1.7" }
+neco-generalized-eigen = { path = "../neco-generalized-eigen", version = "=0.2.2" }
+neco-linear-dense = { path = "../neco-linear-dense", version = "=0.1.1" }
+neco-linear-exact = { path = "../neco-linear-exact", version = "=0.2.0" }
+neco-linear-types = { path = "../neco-linear-types", version = "=0.1.1" }
+
+[dev-dependencies]
+neco-algnum = { path = "../neco-algnum", version = "=0.1.2" }
+neco-expr = { path = "../neco-expr", version = "=0.2.0" }
+neco-formsum = { path = "../neco-formsum", version = "=0.1.2" }
+neco-monomial = { path = "../neco-monomial", version = "=0.1.2" }

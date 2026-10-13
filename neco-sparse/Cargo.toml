@@ -1,6 +1,6 @@
 [package]
 name = "neco-sparse"
-version = "0.2.0"
+version = "0.2.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -17,4 +17,4 @@ default = ["std"]
 std = ["neco-linear-types/std"]
 
 [dependencies]
-neco-linear-types = { path = "../neco-linear-types", version = "=0.1.0", default-features = false }
+neco-linear-types = { path = "../neco-linear-types", version = "=0.1.1", default-features = false }

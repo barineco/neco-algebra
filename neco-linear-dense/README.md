@@ -3,21 +3,23 @@
 [日本語](README-ja.md)
 
 `neco-linear-dense` provides dense matrices for numerical linear algebra.
-
-Each matrix stores a shape and exactly the corresponding number of elements in column-major order. Construction validates storage length, element-count capacity, representable storage length, and allocation. Matrix-vector multiplication for `f64` values validates the input-vector length.
+Each matrix holds exactly as many elements as its shape requires, in column-major order.
+Construction checks that rows × columns fits in `usize`, that the element count equals that product, and that the element count is at most `isize::MAX`, and confirms that memory allocation succeeds.
+Matrix-vector multiplication for `f64` also validates the length of the input vector.
 
 ## Public API
 
-- `DenseMatrix<T>`: dense matrix with private shape and storage
-- `from_column_major`: constructs a matrix from column-major values
-- `from_row_major`: converts row-major values to column-major storage
-- `try_zeros`: constructs storage filled with one value
-- `value`: observes an element using validated row and column indices
-- `LinearOperator<f64>`: applies a matrix to a vector
+- `DenseMatrix<T>`: a dense matrix that holds its shape and elements in private fields
+- `from_column_major`: constructs a matrix from column-major elements
+- `from_row_major`: constructs a matrix by converting row-major elements to column-major storage order
+- `try_zeros`: constructs a matrix with every element initialized to one value
+- `value`: references an element by validated row and column indices
+- `LinearOperator<f64>`: computes the product of the matrix and a vector
 
 ## Runtime configuration
 
-The default configuration uses the standard library. Disabling default features selects `no_std` with `alloc`.
+The standard library is used by default.
+Disabling default features selects the `core + alloc` configuration, which assumes only dynamic memory allocation.
 
 ## License
 

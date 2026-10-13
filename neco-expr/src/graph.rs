@@ -8,7 +8,6 @@ pub struct ExprGraph {
     nodes: Vec<ExprNode>,
 }
 
-#[allow(clippy::new_without_default)]
 impl ExprGraph {
     pub fn new() -> Self {
         Self { nodes: Vec::new() }
@@ -50,6 +49,12 @@ impl ExprGraph {
             nodes.push(node.try_clone().map_err(graph_node_error)?);
         }
         Ok(Self { nodes })
+    }
+}
+
+impl Default for ExprGraph {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

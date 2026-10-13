@@ -65,7 +65,7 @@ fn base_inputs() -> (
 }
 
 #[test]
-fn g_s_d_and_a_updates_are_independent_values() {
+fn graph_atoms_requirements_and_assignments_updates_are_independent_values() {
     let (graph, atoms, requirements, assignments, expressions) = base_inputs();
     let baseline = resolve(&graph, &atoms, &requirements, &assignments);
     let original_graph = graph.try_clone().unwrap();

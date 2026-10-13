@@ -109,6 +109,14 @@ cargo package \
   --list \
   --locked
 cargo package \
+  -p neco-eigensolve-faer \
+  --list \
+  --locked
+cargo package \
+  -p neco-eigensolve-certified \
+  --list \
+  --locked
+cargo package \
   -p neco-sparse \
   --list \
   --locked

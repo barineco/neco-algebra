@@ -1,11 +1,13 @@
+use alloc::boxed::Box;
 use core::fmt;
 
 use neco_algnum::AlgnumError;
-use neco_bigint::BigintError;
+use neco_bigint::{BigintError, Dyadic};
 use neco_formsum::FormSumErrorKind;
 use neco_monomial::MonomialErrorKind;
 
-use crate::{AtomId, ConsumerId, ExprId, StorageResource};
+use crate::product::ComputationProductId;
+use crate::{AbsoluteBits, AtomId, ConsumerId, ExprId, OwnerId, StorageResource};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum StorageError {
@@ -415,6 +417,14 @@ pub enum FailureOperation {
     Assemble,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum MatrixInputRole {
+    Matrix,
+    Stiffness,
+    Mass,
+    MassNormalization,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FailureLocation {
     operation: FailureOperation,
@@ -422,6 +432,9 @@ pub struct FailureLocation {
     expr: Option<ExprId>,
     atom: Option<AtomId>,
     decision: Option<u32>,
+    matrix_role: Option<MatrixInputRole>,
+    row: Option<usize>,
+    column: Option<usize>,
 }
 
 impl FailureLocation {
@@ -432,6 +445,9 @@ impl FailureLocation {
             expr: None,
             atom: None,
             decision: None,
+            matrix_role: None,
+            row: None,
+            column: None,
         }
     }
 
@@ -455,6 +471,17 @@ impl FailureLocation {
         self
     }
 
+    pub const fn with_matrix_role(mut self, role: MatrixInputRole) -> Self {
+        self.matrix_role = Some(role);
+        self
+    }
+
+    pub const fn with_matrix_location(mut self, row: usize, column: usize) -> Self {
+        self.row = Some(row);
+        self.column = Some(column);
+        self
+    }
+
     pub const fn operation_kind(&self) -> FailureOperation {
         self.operation
     }
@@ -474,6 +501,259 @@ impl FailureLocation {
     pub const fn decision(&self) -> Option<u32> {
         self.decision
     }
+
+    pub const fn matrix_role(&self) -> Option<MatrixInputRole> {
+        self.matrix_role
+    }
+
+    pub const fn role(&self) -> Option<MatrixInputRole> {
+        self.matrix_role()
+    }
+
+    pub const fn row(&self) -> Option<usize> {
+        self.row
+    }
+
+    pub const fn column(&self) -> Option<usize> {
+        self.column
+    }
+}
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProvenanceRecord {
+    owner: Option<OwnerId>,
+    consumer_id: Option<ConsumerId>,
+    expr_id: Option<ExprId>,
+    precision: Option<AbsoluteBits>,
+    revision_identity: Option<&'static str>,
+    public_api_identity: Option<&'static str>,
+    product_identity: Option<ComputationProductId>,
+}
+
+impl ProvenanceRecord {
+    pub const fn new(
+        owner: Option<OwnerId>,
+        consumer_id: Option<ConsumerId>,
+        expr_id: Option<ExprId>,
+        precision: Option<AbsoluteBits>,
+        revision_identity: Option<&'static str>,
+        public_api_identity: Option<&'static str>,
+    ) -> Self {
+        Self {
+            owner,
+            consumer_id,
+            expr_id,
+            precision,
+            revision_identity,
+            public_api_identity,
+            product_identity: None,
+        }
+    }
+
+    pub fn with_product_identity(mut self, product_identity: ComputationProductId) -> Self {
+        self.product_identity = Some(product_identity);
+        self
+    }
+
+    pub const fn owner(&self) -> Option<OwnerId> {
+        self.owner
+    }
+
+    pub const fn consumer_id(&self) -> Option<ConsumerId> {
+        self.consumer_id
+    }
+
+    pub const fn expr_id(&self) -> Option<ExprId> {
+        self.expr_id
+    }
+
+    pub const fn precision(&self) -> Option<AbsoluteBits> {
+        self.precision
+    }
+
+    pub const fn revision_identity(&self) -> Option<&'static str> {
+        self.revision_identity
+    }
+
+    pub const fn public_api_identity(&self) -> Option<&'static str> {
+        self.public_api_identity
+    }
+
+    pub fn product_identity(&self) -> Option<ComputationProductId> {
+        self.product_identity.clone()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProvenanceMismatchField {
+    Consumer,
+    Owner,
+    Expression,
+    Precision,
+    Source,
+    Product,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProvenanceMismatchPayload {
+    field: ProvenanceMismatchField,
+    expected: ProvenanceRecord,
+    actual: ProvenanceRecord,
+}
+
+impl ProvenanceMismatchPayload {
+    pub fn new(
+        field: ProvenanceMismatchField,
+        expected: ProvenanceRecord,
+        actual: ProvenanceRecord,
+    ) -> Self {
+        Self {
+            field,
+            expected,
+            actual,
+        }
+    }
+
+    pub const fn field(&self) -> ProvenanceMismatchField {
+        self.field
+    }
+
+    pub fn expected(&self) -> ProvenanceRecord {
+        self.expected.clone()
+    }
+
+    pub fn actual(&self) -> ProvenanceRecord {
+        self.actual.clone()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MatrixInputMismatchField {
+    Shape,
+    Expression,
+    MissingExpression,
+    DuplicateExpression,
+    ExtraExpression,
+    NumericValue,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MatrixInputMismatchPayload {
+    field: MatrixInputMismatchField,
+    row: Option<usize>,
+    column: Option<usize>,
+    expected: ProvenanceRecord,
+    actual: ProvenanceRecord,
+    expected_product: Option<ComputationProductId>,
+    actual_product: Option<ComputationProductId>,
+    expected_expr: Option<ExprId>,
+    actual_expr: Option<ExprId>,
+    expected_value_bits: Option<u64>,
+    actual_value_bits: Option<u64>,
+}
+
+impl MatrixInputMismatchPayload {
+    pub fn new(
+        field: MatrixInputMismatchField,
+        expected: ProvenanceRecord,
+        actual: ProvenanceRecord,
+    ) -> Self {
+        Self {
+            field,
+            row: None,
+            column: None,
+            expected,
+            actual,
+            expected_product: None,
+            actual_product: None,
+            expected_expr: None,
+            actual_expr: None,
+            expected_value_bits: None,
+            actual_value_bits: None,
+        }
+    }
+
+    pub const fn field(&self) -> MatrixInputMismatchField {
+        self.field
+    }
+
+    pub const fn row(&self) -> Option<usize> {
+        self.row
+    }
+
+    pub const fn column(&self) -> Option<usize> {
+        self.column
+    }
+
+    pub const fn expected_expr(&self) -> Option<ExprId> {
+        self.expected_expr
+    }
+
+    pub const fn actual_expr(&self) -> Option<ExprId> {
+        self.actual_expr
+    }
+
+    pub const fn expected_value_bits(&self) -> Option<u64> {
+        self.expected_value_bits
+    }
+
+    pub const fn actual_value_bits(&self) -> Option<u64> {
+        self.actual_value_bits
+    }
+
+    pub fn expected_product_identity(&self) -> Option<ComputationProductId> {
+        self.expected_product.clone()
+    }
+
+    pub fn actual_product_identity(&self) -> Option<ComputationProductId> {
+        self.actual_product.clone()
+    }
+
+    pub fn expected(&self) -> ProvenanceRecord {
+        self.expected.clone()
+    }
+
+    pub fn actual(&self) -> ProvenanceRecord {
+        self.actual.clone()
+    }
+
+    pub fn with_location(mut self, row: usize, column: usize) -> Self {
+        self.row = Some(row);
+        self.column = Some(column);
+        self
+    }
+
+    pub fn with_products(
+        mut self,
+        expected: Option<ComputationProductId>,
+        actual: Option<ComputationProductId>,
+    ) -> Self {
+        self.expected_product = expected;
+        self.actual_product = actual;
+        self
+    }
+
+    pub const fn with_expressions(
+        mut self,
+        expected: Option<ExprId>,
+        actual: Option<ExprId>,
+    ) -> Self {
+        self.expected_expr = expected;
+        self.actual_expr = actual;
+        self
+    }
+
+    pub const fn with_value_bits(mut self, expected: Option<u64>, actual: Option<u64>) -> Self {
+        self.expected_value_bits = expected;
+        self.actual_value_bits = actual;
+        self
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum PrecisionFailurePayload {
+    EnclosureWidth { actual_width: Dyadic },
+    Bigint(BigintError),
+    Algnum(AlgnumError),
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -491,7 +771,6 @@ pub enum StorageFailurePayload {
 pub enum UnsupportedFailurePayload {
     RequiredOperation(&'static str),
     SourceIdentity,
-    Graph(GraphError),
     Insert(InsertError),
     Evaluation(EvalError),
     Resolution(ResolveError),
@@ -526,13 +805,29 @@ pub enum NecoFailure {
     FloatOutOfRange {
         location: FailureLocation,
     },
+    ProvenanceMismatch {
+        location: FailureLocation,
+        payload: Box<ProvenanceMismatchPayload>,
+    },
+    MatrixInputMismatch {
+        location: FailureLocation,
+        payload: Box<MatrixInputMismatchPayload>,
+    },
+    MissingMatrixInput {
+        location: FailureLocation,
+    },
+    PrecisionExhaustion {
+        location: FailureLocation,
+        requested: AbsoluteBits,
+        payload: Box<PrecisionFailurePayload>,
+    },
     StorageFailure {
         location: FailureLocation,
-        payload: StorageFailurePayload,
+        payload: Box<StorageFailurePayload>,
     },
     UnsupportedRequiredOperation {
         location: FailureLocation,
-        payload: UnsupportedFailurePayload,
+        payload: Box<UnsupportedFailurePayload>,
     },
 }
 
@@ -548,6 +843,10 @@ impl NecoFailure {
             | Self::InvalidIsolation { location }
             | Self::MultipleTargetRoots { location }
             | Self::FloatOutOfRange { location }
+            | Self::ProvenanceMismatch { location, .. }
+            | Self::MatrixInputMismatch { location, .. }
+            | Self::MissingMatrixInput { location }
+            | Self::PrecisionExhaustion { location, .. }
             | Self::StorageFailure { location, .. }
             | Self::UnsupportedRequiredOperation { location, .. } => location,
         }
@@ -573,7 +872,7 @@ impl NecoFailure {
 pub(crate) fn map_storage_failure(location: FailureLocation, error: StorageError) -> NecoFailure {
     NecoFailure::StorageFailure {
         location,
-        payload: StorageFailurePayload::Storage(error),
+        payload: Box::new(StorageFailurePayload::Storage(error)),
     }
 }
 
@@ -581,7 +880,7 @@ pub(crate) fn map_graph_failure(location: FailureLocation, error: GraphError) ->
     match error {
         GraphError::IdExhausted => NecoFailure::StorageFailure {
             location,
-            payload: StorageFailurePayload::GraphIdExhausted,
+            payload: Box::new(StorageFailurePayload::GraphIdExhausted),
         },
         GraphError::InvalidChildId { child, .. } => NecoFailure::UnknownExpression {
             location: location.with_expr(child),
@@ -595,7 +894,7 @@ pub(crate) fn map_insert_failure(location: FailureLocation, error: InsertError) 
     match error {
         InsertError::DuplicateId { resource, id } => NecoFailure::StorageFailure {
             location,
-            payload: StorageFailurePayload::DuplicateId { resource, id },
+            payload: Box::new(StorageFailurePayload::DuplicateId { resource, id }),
         },
         InsertError::Value(error) => map_eval_failure(location, error),
         InsertError::Storage(error) => map_storage_failure(location, error),
@@ -649,13 +948,15 @@ fn map_bigint_failure(location: FailureLocation, error: BigintError) -> NecoFail
         | BigintError::AllocationFailure { .. }
         | BigintError::ExponentOverflow { .. } => NecoFailure::StorageFailure {
             location,
-            payload: StorageFailurePayload::Bigint(error),
+            payload: Box::new(StorageFailurePayload::Bigint(error)),
         },
         BigintError::UnsignedUnderflow
         | BigintError::NonExactDivision
         | BigintError::InvalidInterval => NecoFailure::UnsupportedRequiredOperation {
             location,
-            payload: UnsupportedFailurePayload::Evaluation(EvalError::Bigint(error)),
+            payload: Box::new(UnsupportedFailurePayload::Evaluation(EvalError::Bigint(
+                error,
+            ))),
         },
     }
 }
@@ -670,13 +971,15 @@ fn map_monomial_failure(location: FailureLocation, error: MonomialErrorKind) -> 
         MonomialErrorKind::CapacityOverflow | MonomialErrorKind::AllocationFailure { .. } => {
             NecoFailure::StorageFailure {
                 location,
-                payload: StorageFailurePayload::Monomial(error),
+                payload: Box::new(StorageFailurePayload::Monomial(error)),
             }
         }
         MonomialErrorKind::Bigint(error) => map_bigint_failure(location, error),
         MonomialErrorKind::InvalidRadicalBasis => NecoFailure::UnsupportedRequiredOperation {
             location,
-            payload: UnsupportedFailurePayload::Evaluation(EvalError::Monomial(error)),
+            payload: Box::new(UnsupportedFailurePayload::Evaluation(EvalError::Monomial(
+                error,
+            ))),
         },
     }
 }
@@ -687,7 +990,7 @@ fn map_formsum_failure(location: FailureLocation, error: FormSumErrorKind) -> Ne
         FormSumErrorKind::DimensionOverflow { .. } | FormSumErrorKind::AllocationFailure { .. } => {
             NecoFailure::StorageFailure {
                 location,
-                payload: StorageFailurePayload::FormSum(error),
+                payload: Box::new(StorageFailurePayload::FormSum(error)),
             }
         }
         FormSumErrorKind::Bigint(error) => map_bigint_failure(location, error),
@@ -710,13 +1013,15 @@ fn map_algnum_failure(location: FailureLocation, error: AlgnumError) -> NecoFail
         | AlgnumError::AllocationLimit { .. }
         | AlgnumError::AllocationFailure { .. } => NecoFailure::StorageFailure {
             location,
-            payload: StorageFailurePayload::Algnum(error),
+            payload: Box::new(StorageFailurePayload::Algnum(error)),
         },
         AlgnumError::Bigint(error) => map_bigint_failure(location, error),
         AlgnumError::FormSum(error) => map_formsum_failure(location, error),
         AlgnumError::ZeroRootDegree => NecoFailure::UnsupportedRequiredOperation {
             location,
-            payload: UnsupportedFailurePayload::Evaluation(EvalError::Algnum(error)),
+            payload: Box::new(UnsupportedFailurePayload::Evaluation(EvalError::Algnum(
+                error,
+            ))),
         },
     }
 }

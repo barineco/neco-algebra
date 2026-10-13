@@ -1,6 +1,6 @@
 [package]
 name = "neco-expr"
-version = "0.1.2"
+version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -17,7 +17,7 @@ default = ["std"]
 std = ["neco-bigint/std", "neco-monomial/std", "neco-formsum/std", "neco-algnum/std"]
 
 [dependencies]
-neco-algnum = { path = "../neco-algnum", version = "=0.1.1", default-features = false }
-neco-bigint = { path = "../neco-bigint", version = "=0.1.1", default-features = false }
-neco-formsum = { path = "../neco-formsum", version = "=0.1.1", default-features = false }
-neco-monomial = { path = "../neco-monomial", version = "=0.1.1", default-features = false }
+neco-algnum = { path = "../neco-algnum", version = "=0.1.2", default-features = false }
+neco-bigint = { path = "../neco-bigint", version = "=0.1.2", default-features = false }
+neco-formsum = { path = "../neco-formsum", version = "=0.1.2", default-features = false }
+neco-monomial = { path = "../neco-monomial", version = "=0.1.2", default-features = false }

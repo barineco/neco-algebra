@@ -18,4 +18,5 @@ macro_rules! id_type {
 id_type!(ExprId);
 id_type!(AtomId);
 id_type!(ConsumerId);
+id_type!(OwnerId);
 id_type!(AbsoluteBits);

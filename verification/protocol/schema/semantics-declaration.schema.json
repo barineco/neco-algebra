@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "neco.verification.semantics-declaration.v2",
+  "type": "object",
+  "properties": {
+    "schema": {"const": "neco.verification.semantics-declaration.v2"},
+    "domain": {"enum": ["neco.algebra", "neco.calculus", "neco.geometry", "neco.cad"]},
+    "revision": {"type": "string", "minLength": 1},
+    "ownedModules": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/module"}},
+    "upstreamSemantics": {"type": "array", "items": {"$ref": "#/$defs/upstream"}}
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "domain": {"const": "neco.algebra"},
+        "algebraCheckerApiRevision": {"type": "string", "minLength": 1},
+        "algebraModuleRevision": {"type": "string", "minLength": 1},
+        "upstreamSemantics": {"maxItems": 0}
+      },
+      "required": ["algebraCheckerApiRevision", "algebraModuleRevision"]
+    },
+    {
+      "properties": {
+        "domain": {"const": "neco.calculus"},
+        "calculusCheckerApiRevision": {"type": "string", "minLength": 1},
+        "calculusModuleRevision": {"type": "string", "minLength": 1},
+        "upstreamSemantics": {"minItems": 1, "maxItems": 1}
+      },
+      "required": ["calculusCheckerApiRevision", "calculusModuleRevision"]
+    },
+    {
+      "properties": {
+        "domain": {"const": "neco.geometry"},
+        "geometryCheckerApiRevision": {"type": "string", "minLength": 1},
+        "geometryModuleRevision": {"type": "string", "minLength": 1},
+        "upstreamSemantics": {"minItems": 2, "maxItems": 2}
+      },
+      "required": ["geometryCheckerApiRevision", "geometryModuleRevision"]
+    },
+    {
+      "properties": {
+        "domain": {"const": "neco.cad"},
+        "cadCheckerApiRevision": {"type": "string", "minLength": 1},
+        "cadModuleRevision": {"type": "string", "minLength": 1},
+        "ownedModules": {
+          "minItems": 14,
+          "maxItems": 14,
+          "prefixItems": [
+            {"properties": {"module": {"const": "NecoCadVerify.Semantics"}}},
+            {"properties": {"module": {"const": "NecoCadVerify.Geometry"}}},
+            {"properties": {"module": {"const": "NecoCadVerify.Compose"}}},
+            {"properties": {"module": {"const": "NecoCadVerify.ExactChart"}}},
+            {"properties": {"module": {"const": "NecoCadVerify.FiniteSurface"}}},
+            {"properties": {"module": {"const": "NecoCadVerify.FaceAtomCovering"}}},
+            {"properties": {"module": {"const": "NecoCadVerify.ChordBound"}}},
+            {"properties": {"module": {"const": "NecoCadVerify.Mesh"}}},
+            {"properties": {"module": {"const": "NecoCadVerify.Soundness"}}},
+            {"properties": {"module": {"const": "NecoCadVerify.Checker"}}},
+            {"properties": {"module": {"const": "NecoCadVerify.Decode"}}},
+            {"properties": {"module": {"const": "NecoCadVerify.Protocol"}}},
+            {"properties": {"module": {"const": "NecoCadVerify.Observation"}}},
+            {"properties": {"module": {"const": "NecoCadVerify.DeclarationBindings"}}}
+          ]
+        },
+        "upstreamSemantics": {"minItems": 3, "maxItems": 3}
+      },
+      "required": ["cadCheckerApiRevision", "cadModuleRevision"]
+    }
+  ],
+  "unevaluatedProperties": false,
+  "$defs": {
+    "module": {
+      "type": "object",
+      "properties": {
+        "module": {"type": "string", "pattern": "^Neco(Algebra|Calculus|Geometry|Cad)Verify\\.[A-Za-z0-9_.]+$"},
+        "sourcePath": {"type": "string", "pattern": "^verification/lean/Neco(Algebra|Calculus|Geometry|Cad)Verify/[A-Za-z0-9_/]+\\.lean$"}
+      },
+      "required": ["module", "sourcePath"],
+      "additionalProperties": false
+    },
+    "upstream": {
+      "type": "object",
+      "properties": {
+        "domain": {"enum": ["neco.algebra", "neco.calculus", "neco.geometry"]},
+        "revision": {"type": "string", "minLength": 1},
+        "sourcePath": {"enum": ["verification/manifest/algebra-semantics.json", "verification/manifest/calculus-semantics.json", "verification/manifest/geometry-semantics.json"]}
+      },
+      "required": ["domain", "revision", "sourcePath"],
+      "additionalProperties": false
+    }
+  }
+}

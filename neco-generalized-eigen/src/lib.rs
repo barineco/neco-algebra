@@ -4,6 +4,7 @@
 
 extern crate alloc;
 
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
 use neco_complex::Complex;
@@ -71,10 +72,12 @@ impl fmt::Display for GeneralizedEigenError {
 #[cfg(feature = "std")]
 impl std::error::Error for GeneralizedEigenError {}
 
+/// 一般化固有値問題 K x = λ M x です。質量の計量は問題ごとに一つ作り、問題から作る全ての固有空間で共有します。
 #[derive(Clone, Debug, PartialEq)]
 pub struct GeneralizedEigenProblem {
     stiffness: DenseMatrix<f64>,
     mass: DenseMatrix<f64>,
+    mass_metric: Arc<OwnedMassMetric>,
 }
 
 impl GeneralizedEigenProblem {
@@ -83,7 +86,12 @@ impl GeneralizedEigenProblem {
         mass: DenseMatrix<f64>,
     ) -> Result<Self, GeneralizedEigenError> {
         validate_problem_shapes(stiffness.shape(), mass.shape())?;
-        Ok(Self { stiffness, mass })
+        let mass_metric = Arc::new(OwnedMassMetric::try_from_dense(&mass)?);
+        Ok(Self {
+            stiffness,
+            mass,
+            mass_metric,
+        })
     }
 
     pub fn from_csr(
@@ -162,6 +170,17 @@ impl EigenResidual {
     pub fn relative(&self) -> f64 {
         self.relative
     }
+
+    /// Returns the convergence decision shared by every sibling eigensolver:
+    /// exact zero when both tolerances are zero, otherwise either tolerance
+    /// suffices.
+    pub fn meets_tolerance(&self, absolute_tolerance: f64, relative_tolerance: f64) -> bool {
+        if absolute_tolerance == 0.0 && relative_tolerance == 0.0 {
+            self.absolute == 0.0
+        } else {
+            self.absolute <= absolute_tolerance || self.relative <= relative_tolerance
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -198,11 +217,92 @@ impl Eigenpair {
     }
 }
 
+#[derive(Clone, Debug)]
+struct MassEntry {
+    position: usize,
+    bits: u64,
+}
+
+#[derive(Clone, Debug)]
+struct OwnedMassMetric {
+    shape: Shape,
+    length: usize,
+    entries: Vec<MassEntry>,
+}
+
+impl OwnedMassMetric {
+    fn try_from_dense(mass: &DenseMatrix<f64>) -> Result<Self, GeneralizedEigenError> {
+        let shape = mass.shape();
+        let length = shape.element_count()?;
+        if mass.len() != length {
+            return Err(LinearError::StorageLengthMismatch {
+                expected: length,
+                actual: mass.len(),
+            }
+            .into());
+        }
+        if length > isize::MAX as usize {
+            return Err(LinearError::InvalidStorage {
+                reason: "matrix length exceeds the representable allocation limit",
+            }
+            .into());
+        }
+        let mut count = 0usize;
+        for value in mass.values() {
+            if value.to_bits() != 0 {
+                count = count.checked_add(1).ok_or(LinearError::CapacityOverflow {
+                    requested: usize::MAX,
+                })?;
+            }
+        }
+        let capacity_bytes = count
+            .checked_mul(core::mem::size_of::<MassEntry>())
+            .ok_or(LinearError::CapacityOverflow { requested: count })?;
+        if capacity_bytes > isize::MAX as usize {
+            return Err(LinearError::CapacityOverflow { requested: count }.into());
+        }
+        let mut entries = Vec::new();
+        entries
+            .try_reserve_exact(count)
+            .map_err(|_| LinearError::AllocationFailure { requested: count })?;
+        for (position, value) in mass.values().iter().enumerate() {
+            let bits = value.to_bits();
+            if bits != 0 {
+                entries.push(MassEntry { position, bits });
+            }
+        }
+        Ok(Self {
+            shape,
+            length,
+            entries,
+        })
+    }
+
+    fn values(&self) -> impl Iterator<Item = f64> + '_ {
+        let mut cursor = 0;
+        (0..self.length).map(move |position| {
+            if let Some(entry) = self.entries.get(cursor) {
+                if entry.position == position {
+                    cursor += 1;
+                    return f64::from_bits(entry.bits);
+                }
+            }
+            f64::from_bits(0)
+        })
+    }
+}
+
+impl PartialEq for OwnedMassMetric {
+    fn eq(&self, other: &Self) -> bool {
+        self.shape == other.shape && self.values().eq(other.values())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Eigenspace {
     eigenvalue: f64,
     basis: Vec<Eigenpair>,
-    mass: DenseMatrix<f64>,
+    mass: Arc<OwnedMassMetric>,
 }
 
 impl Eigenspace {
@@ -245,7 +345,8 @@ impl Eigenspace {
                 });
             }
             let norm = mass_inner_product(
-                problem.mass(),
+                problem.mass().shape(),
+                problem.mass().values().iter().copied(),
                 eigenpair.eigenvector.values(),
                 eigenpair.eigenvector.values(),
             )?;
@@ -258,7 +359,8 @@ impl Eigenspace {
         for (index, left) in basis.iter().enumerate() {
             for right in basis.iter().skip(index + 1) {
                 if mass_inner_product(
-                    problem.mass(),
+                    problem.mass().shape(),
+                    problem.mass().values().iter().copied(),
                     left.eigenvector.values(),
                     right.eigenvector.values(),
                 )?
@@ -274,7 +376,7 @@ impl Eigenspace {
         Ok(Self {
             eigenvalue,
             basis,
-            mass: problem.mass().clone(),
+            mass: Arc::clone(&problem.mass_metric),
         })
     }
 
@@ -323,7 +425,8 @@ impl EigenProjector {
         projected.resize(self.domain(), 0.0);
         for eigenpair in self.eigenspace.basis() {
             let coefficient = mass_inner_product(
-                &self.eigenspace.mass,
+                self.eigenspace.mass.shape,
+                self.eigenspace.mass.values(),
                 eigenpair.eigenvector.values(),
                 input.values(),
             )?;
@@ -574,23 +677,34 @@ fn is_finite_nonnegative(value: f64) -> bool {
 }
 
 fn mass_inner_product(
-    mass: &DenseMatrix<f64>,
+    shape: Shape,
+    mut values: impl Iterator<Item = f64>,
     left: &[f64],
     right: &[f64],
 ) -> Result<f64, GeneralizedEigenError> {
-    if left.len() != mass.columns() || right.len() != mass.rows() {
+    if left.len() != shape.columns() || right.len() != shape.rows() {
         return Err(GeneralizedEigenError::DimensionMismatch {
-            stiffness_rows: mass.rows(),
-            stiffness_columns: mass.columns(),
+            stiffness_rows: shape.rows(),
+            stiffness_columns: shape.columns(),
             mass_rows: left.len(),
             mass_columns: right.len(),
         });
     }
     let mut sum = 0.0;
-    let shape = mass.shape();
     for (column, right_value) in right.iter().enumerate() {
         for (row, left_value) in left.iter().enumerate() {
-            let value = *mass.value(shape.row_index(row)?, shape.column_index(column)?)?;
+            let row_index = shape.row_index(row)?;
+            let column_index = shape.column_index(column)?;
+            let _position = column_index
+                .value()
+                .checked_mul(shape.rows())
+                .and_then(|offset| offset.checked_add(row_index.value()))
+                .ok_or(LinearError::CapacityOverflow {
+                    requested: usize::MAX,
+                })?;
+            let value = values.next().ok_or(LinearError::InvalidStorage {
+                reason: "matrix storage is shorter than its declared shape",
+            })?;
             sum += left_value * value * right_value;
         }
     }
@@ -698,6 +812,22 @@ mod tests {
             .expect("residual");
         assert_eq!(residual.absolute(), 0.0);
         assert_eq!(residual.relative(), 0.0);
+    }
+
+    #[test]
+    fn meets_tolerance_requires_exact_zero_residual_when_both_tolerances_are_zero() {
+        let zero_residual = EigenResidual::new(0.0, 0.0).expect("zero residual");
+        assert!(zero_residual.meets_tolerance(0.0, 0.0));
+        let tiny_residual = EigenResidual::new(1.0e-15, 1.0e-15).expect("tiny residual");
+        assert!(!tiny_residual.meets_tolerance(0.0, 0.0));
+    }
+
+    #[test]
+    fn meets_tolerance_accepts_either_absolute_or_relative_tolerance() {
+        let residual = EigenResidual::new(1.0e-6, 1.0e-2).expect("residual");
+        assert!(residual.meets_tolerance(1.0e-5, 1.0e-12));
+        assert!(residual.meets_tolerance(1.0e-12, 1.0e-1));
+        assert!(!residual.meets_tolerance(1.0e-12, 1.0e-12));
     }
 
     #[test]

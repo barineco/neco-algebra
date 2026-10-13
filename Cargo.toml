@@ -11,6 +11,7 @@ members = [
     "neco-generalized-eigen",
     "neco-eigensolve",
     "neco-eigensolve-faer",
+    "neco-eigensolve-certified",
     "neco-sparse",
     "neco-formsum",
     "neco-monomial",

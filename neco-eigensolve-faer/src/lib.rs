@@ -1,9 +1,22 @@
 #![forbid(unsafe_code)]
 #![doc = include_str!("../README.md")]
 
+mod complex_lu;
+mod condition;
+mod convert;
+mod nonsymmetric;
+mod refine;
+
+pub use complex_lu::ComplexLu;
+pub use condition::condition_number_2;
+pub use nonsymmetric::{solve_nonsymmetric_f64, NonsymmetricEigenDecomposition};
+
 use core::fmt;
-use faer::linalg::solvers::SelfAdjointEigen;
-use faer::{Mat, Side, Unbind};
+use faer::dyn_stack::{MemBuffer, MemStack};
+use faer::linalg::evd::{
+    self_adjoint_evd, self_adjoint_evd_scratch, ComputeEigenvectors, SelfAdjointEvdParams,
+};
+use faer::{Mat, Spec, Unbind};
 use neco_eigensolve::{EigensolveConfig, EigensolveError, EigensolveRequest, EigensolveResult};
 use neco_generalized_eigen::{
     ConvergenceStatus, EigenShift, Eigenpair, Eigenspace, GeneralizedEigenError,
@@ -14,13 +27,52 @@ use neco_linear_types::{LinearError, Vector};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum EigensolveFaerError {
-    InvalidStiffnessMatrix { reason: &'static str },
-    InvalidMassMatrix { reason: &'static str },
+    InvalidStiffnessMatrix {
+        reason: &'static str,
+    },
+    InvalidMassMatrix {
+        reason: &'static str,
+    },
     NonPositiveMassMatrix,
-    ExternalSolver { reason: &'static str },
+    InvalidMatrix {
+        operation: &'static str,
+        reason: &'static str,
+    },
+    SingularPivot {
+        operation: &'static str,
+        index: usize,
+        magnitude: f64,
+    },
+    RightHandSide {
+        operation: &'static str,
+        expected: usize,
+        actual: usize,
+    },
+    NonFiniteResult {
+        operation: &'static str,
+    },
+    EigenvectorRefinement {
+        operation: &'static str,
+        index: usize,
+        residual: f64,
+        kind: RefinementFailureKind,
+    },
+    ExternalSolver {
+        operation: &'static str,
+        reason: &'static str,
+    },
     Core(EigensolveError),
     Generalized(GeneralizedEigenError),
     Linear(LinearError),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RefinementFailureKind {
+    ResidualExceeded,
+    RealEigenvalue,
+    LinearlyDependent,
+    NearRealAxis,
+    SubproblemFailed,
 }
 
 impl From<EigensolveError> for EigensolveFaerError {
@@ -53,8 +105,45 @@ impl fmt::Display for EigensolveFaerError {
             Self::NonPositiveMassMatrix => {
                 write!(formatter, "mass matrix is not positive definite")
             }
-            Self::ExternalSolver { reason } => {
-                write!(formatter, "external solver failed: {reason}")
+            Self::InvalidMatrix { operation, reason } => {
+                write!(formatter, "invalid matrix in {operation}: {reason}")
+            }
+            Self::SingularPivot {
+                operation,
+                index,
+                magnitude,
+            } => {
+                write!(
+                    formatter,
+                    "pivot {index} in {operation} is zero or not finite (magnitude {magnitude})"
+                )
+            }
+            Self::RightHandSide {
+                operation,
+                expected,
+                actual,
+            } => {
+                write!(
+                    formatter,
+                    "right-hand side in {operation} has {actual} rows, expected {expected}"
+                )
+            }
+            Self::EigenvectorRefinement {
+                operation,
+                index,
+                residual,
+                kind,
+            } => {
+                write!(
+                    formatter,
+                    "eigenpair {index} in {operation} has residual {residual} ({kind:?})"
+                )
+            }
+            Self::NonFiniteResult { operation } => {
+                write!(formatter, "{operation} produced a non-finite result")
+            }
+            Self::ExternalSolver { operation, reason } => {
+                write!(formatter, "external solver failed in {operation}: {reason}")
             }
             Self::Core(error) => error.fmt(formatter),
             Self::Generalized(error) => error.fmt(formatter),
@@ -69,14 +158,77 @@ pub fn solve_symmetric_f64(
     problem: &GeneralizedEigenProblem,
     config: EigensolveConfig,
 ) -> Result<EigensolveResult, EigensolveFaerError> {
-    solve_parts(problem, config, ())
+    solve_parts(problem, config, (), "solve_symmetric_f64")
 }
 
 pub fn solve_request_symmetric_f64<R>(
     request: EigensolveRequest<R>,
 ) -> Result<EigensolveResult<R>, EigensolveFaerError> {
     let (problem, config, projection_reference) = request.into_parts();
-    solve_parts(&problem, config, projection_reference)
+    solve_parts(
+        &problem,
+        config,
+        projection_reference,
+        "solve_request_symmetric_f64",
+    )
+}
+
+/// Approximate solution to the mass equation, reusing the same Cholesky path
+/// as the solver. Serves only as a correction input for an independently
+/// certified bound, never as a bound itself.
+pub fn approximate_mass_solve(
+    mass: &DenseMatrix<f64>,
+    rhs: &Vector<f64>,
+) -> Result<Vector<f64>, EigensolveFaerError> {
+    let dimension = mass.rows();
+    if rhs.len() != dimension {
+        return Err(EigensolveFaerError::Linear(
+            LinearError::StorageLengthMismatch {
+                expected: dimension,
+                actual: rhs.len(),
+            },
+        ));
+    }
+    validate_symmetric_finite(mass, "mass")?;
+    let lower = cholesky_lower(mass)?;
+    let inverse_lower = inverse_lower_triangular(&lower)?;
+
+    let mut intermediate = Vec::new();
+    intermediate
+        .try_reserve_exact(dimension)
+        .map_err(|_| allocation_error(dimension))?;
+    for row in 0..dimension {
+        let mut value = 0.0;
+        for column in 0..dimension {
+            value += inverse_lower[(row, column)] * rhs.values()[column];
+        }
+        if !value.is_finite() {
+            return Err(EigensolveFaerError::ExternalSolver {
+                operation: "approximate_mass_solve",
+                reason: "mass equation intermediate solution is not finite",
+            });
+        }
+        intermediate.push(value);
+    }
+
+    let mut solution = Vec::new();
+    solution
+        .try_reserve_exact(dimension)
+        .map_err(|_| allocation_error(dimension))?;
+    for row in 0..dimension {
+        let mut value = 0.0;
+        for column in 0..dimension {
+            value += inverse_lower[(column, row)] * intermediate[column];
+        }
+        if !value.is_finite() {
+            return Err(EigensolveFaerError::ExternalSolver {
+                operation: "approximate_mass_solve",
+                reason: "mass equation solution is not finite",
+            });
+        }
+        solution.push(value);
+    }
+    Ok(Vector::try_from_vec(solution)?)
 }
 
 /// Transforms the generalized problem into a symmetric standard problem using
@@ -85,30 +237,32 @@ fn solve_parts<R>(
     problem: &GeneralizedEigenProblem,
     config: EigensolveConfig,
     projection_reference: R,
+    operation: &'static str,
 ) -> Result<EigensolveResult<R>, EigensolveFaerError> {
     validate_symmetric_finite(problem.stiffness(), "stiffness")?;
     validate_symmetric_finite(problem.mass(), "mass")?;
 
     let stiffness = to_faer_matrix(problem.stiffness())?;
-    let lower_mass = cholesky_lower(problem.mass())?;
-    let inverse_lower = inverse_lower_triangular(&lower_mass)?;
-    let reduced_stiffness = congruence_transform(&inverse_lower, &stiffness)?;
-    let decomposition =
-        SelfAdjointEigen::new(reduced_stiffness.as_ref(), Side::Lower).map_err(|_| {
-            EigensolveFaerError::ExternalSolver {
-                reason: "symmetric eigendecomposition did not converge",
-            }
-        })?;
-
+    let (reduced_stiffness, inverse_lower) = if is_exact_identity(problem.mass())? {
+        (stiffness, None)
+    } else {
+        let lower_mass = cholesky_lower(problem.mass())?;
+        let inverse_lower = inverse_lower_triangular(&lower_mass)?;
+        let reduced_stiffness = congruence_transform(&inverse_lower, &stiffness, operation)?;
+        (reduced_stiffness, Some(inverse_lower))
+    };
+    let (eigenvalues, eigenvector_values) = decompose_qr(reduced_stiffness.as_ref(), operation)?;
     let dimension = problem.dimension();
+    let eigenvectors =
+        faer::MatRef::from_column_major_slice(&eigenvector_values, dimension, dimension);
     let mut candidates = Vec::new();
     candidates
         .try_reserve_exact(dimension)
         .map_err(|_| allocation_error(dimension))?;
-    for column in 0..dimension {
-        let eigenvalue = decomposition.S()[column];
+    for (column, &eigenvalue) in eigenvalues.iter().enumerate() {
         if !eigenvalue.is_finite() {
             return Err(EigensolveFaerError::ExternalSolver {
+                operation,
                 reason: "generalized eigenvalue is not finite",
             });
         }
@@ -119,10 +273,11 @@ fn solve_parts<R>(
     let selected_modes = config.requested_modes().min(dimension);
     let eigenspaces = build_eigenspaces(
         problem,
-        decomposition.U(),
-        &inverse_lower,
+        eigenvectors,
+        inverse_lower.as_ref(),
         &candidates,
         selected_modes,
+        operation,
     )?;
     let returned_modes = eigenspaces
         .iter()
@@ -131,7 +286,10 @@ fn solve_parts<R>(
     let converged_modes = eigenspaces
         .iter()
         .flat_map(|eigenspace| eigenspace.basis())
-        .filter(|pair| residual_converged(pair, config))
+        .filter(|pair| {
+            pair.residual()
+                .meets_tolerance(config.absolute_tolerance(), config.relative_tolerance())
+        })
         .count();
     let convergence = if converged_modes == returned_modes {
         ConvergenceStatus::converged(
@@ -152,12 +310,95 @@ fn solve_parts<R>(
             config.relative_tolerance(),
         )?
     };
-    Ok(EigensolveResult::from_projected_parts(
+    let result = EigensolveResult::from_projected_parts(
         eigenspaces,
         convergence,
         EigenShift::new(neco_complex::Complex::<f64>::zero())?,
         projection_reference,
-    )?)
+    )?;
+    Ok(result)
+}
+
+fn decompose_qr(
+    matrix: faer::MatRef<'_, f64>,
+    operation: &'static str,
+) -> Result<(Vec<f64>, Vec<f64>), EigensolveFaerError> {
+    let dimension = matrix.nrows();
+    if matrix.ncols() != dimension {
+        return Err(LinearError::DimensionMismatch {
+            expected_rows: dimension,
+            expected_columns: dimension,
+            actual_rows: matrix.nrows(),
+            actual_columns: matrix.ncols(),
+        }
+        .into());
+    }
+    if dimension == 0 {
+        return Ok((Vec::new(), Vec::new()));
+    }
+    let recursion_threshold = dimension
+        .checked_add(1)
+        .ok_or(LinearError::CapacityOverflow {
+            requested: usize::MAX,
+        })?;
+    let vector_elements =
+        dimension
+            .checked_mul(dimension)
+            .ok_or(LinearError::CapacityOverflow {
+                requested: usize::MAX,
+            })?;
+    check_f64_capacity(dimension)?;
+    check_f64_capacity(vector_elements)?;
+    let mut eigenvalues = zeroed_factor_buffer(dimension)?;
+    let mut eigenvectors = zeroed_factor_buffer(vector_elements)?;
+    let mut params = Spec::<SelfAdjointEvdParams, f64>::default();
+    params.config.recursion_threshold = recursion_threshold;
+    let parallelism = faer::get_global_parallelism();
+    let scratch =
+        self_adjoint_evd_scratch::<f64>(dimension, ComputeEigenvectors::Yes, parallelism, params);
+    let mut workspace = try_workspace(scratch)?;
+    self_adjoint_evd(
+        matrix,
+        faer::diag::DiagMut::from_slice_mut(&mut eigenvalues),
+        Some(faer::MatMut::from_column_major_slice_mut(
+            &mut eigenvectors,
+            dimension,
+            dimension,
+        )),
+        parallelism,
+        MemStack::new(&mut workspace),
+        params,
+    )
+    .map_err(|_| EigensolveFaerError::ExternalSolver {
+        operation,
+        reason: "symmetric eigendecomposition did not converge",
+    })?;
+    Ok((eigenvalues, eigenvectors))
+}
+
+fn check_f64_capacity(elements: usize) -> Result<(), EigensolveFaerError> {
+    let bytes =
+        elements
+            .checked_mul(core::mem::size_of::<f64>())
+            .ok_or(LinearError::CapacityOverflow {
+                requested: elements,
+            })?;
+    if bytes > isize::MAX as usize {
+        return Err(LinearError::CapacityOverflow {
+            requested: elements,
+        }
+        .into());
+    }
+    Ok(())
+}
+
+fn zeroed_factor_buffer(elements: usize) -> Result<Vec<f64>, EigensolveFaerError> {
+    let mut values = Vec::new();
+    values
+        .try_reserve_exact(elements)
+        .map_err(|_| allocation_error(elements))?;
+    values.resize(elements, 0.0);
+    Ok(values)
 }
 
 fn validate_symmetric_finite(
@@ -192,6 +433,20 @@ fn validate_symmetric_finite(
         }
     }
     Ok(())
+}
+
+fn is_exact_identity(matrix: &DenseMatrix<f64>) -> Result<bool, EigensolveFaerError> {
+    let shape = matrix.shape();
+    for row in 0..matrix.rows() {
+        for column in 0..matrix.columns() {
+            let value = *matrix.value(shape.row_index(row)?, shape.column_index(column)?)?;
+            let expected: f64 = if row == column { 1.0 } else { 0.0 };
+            if value.to_bits() != expected.to_bits() {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
 }
 
 fn to_faer_matrix(matrix: &DenseMatrix<f64>) -> Result<Mat<f64>, EigensolveFaerError> {
@@ -248,24 +503,35 @@ fn inverse_lower_triangular(lower: &Mat<f64>) -> Result<Mat<f64>, EigensolveFaer
 fn congruence_transform(
     inverse_lower: &Mat<f64>,
     stiffness: &Mat<f64>,
+    operation: &'static str,
 ) -> Result<Mat<f64>, EigensolveFaerError> {
     let dimension = stiffness.nrows();
+    let mut left_product = Mat::zeros(dimension, dimension);
+    faer::linalg::matmul::matmul(
+        left_product.as_mut(),
+        faer::Accum::Replace,
+        inverse_lower.as_ref(),
+        stiffness.as_ref(),
+        1.0,
+        faer::Par::Seq,
+    );
     let mut transformed = Mat::zeros(dimension, dimension);
+    faer::linalg::matmul::matmul(
+        transformed.as_mut(),
+        faer::Accum::Replace,
+        left_product.as_ref(),
+        inverse_lower.transpose(),
+        1.0,
+        faer::Par::Seq,
+    );
     for row in 0..dimension {
         for column in 0..dimension {
-            let mut value = 0.0;
-            for left in 0..dimension {
-                for right in 0..dimension {
-                    let right_product = stiffness[(left, right)] * inverse_lower[(column, right)];
-                    value += inverse_lower[(row, left)] * right_product;
-                }
-            }
-            if !value.is_finite() {
+            if !transformed[(row, column)].is_finite() {
                 return Err(EigensolveFaerError::ExternalSolver {
+                    operation,
                     reason: "reduced stiffness matrix is not finite",
                 });
             }
-            transformed[(row, column)] = value;
         }
     }
     Ok(transformed)
@@ -274,9 +540,10 @@ fn congruence_transform(
 fn build_eigenspaces(
     problem: &GeneralizedEigenProblem,
     eigenvectors: faer::MatRef<'_, f64>,
-    inverse_lower: &Mat<f64>,
+    inverse_lower: Option<&Mat<f64>>,
     candidates: &[(f64, usize)],
     selected_modes: usize,
+    operation: &'static str,
 ) -> Result<Vec<Eigenspace>, EigensolveFaerError> {
     let mut eigenspaces = Vec::new();
     eigenspaces
@@ -294,7 +561,8 @@ fn build_eigenspaces(
             if !same_eigenvalue(eigenvalue, candidate) {
                 break;
             }
-            let vector = canonicalized_vector(problem, eigenvectors, inverse_lower, column)?;
+            let vector =
+                canonicalized_vector(problem, eigenvectors, inverse_lower, column, operation)?;
             basis.push(Eigenpair::new(problem, eigenvalue, vector)?);
             selected = selected
                 .checked_add(1)
@@ -315,27 +583,52 @@ fn build_eigenspaces(
 fn canonicalized_vector(
     problem: &GeneralizedEigenProblem,
     eigenvectors: faer::MatRef<'_, f64>,
-    inverse_lower: &Mat<f64>,
+    inverse_lower: Option<&Mat<f64>>,
     column: usize,
+    operation: &'static str,
 ) -> Result<Vector<f64>, EigensolveFaerError> {
     let dimension = problem.dimension();
     let mut values = Vec::new();
     values
         .try_reserve_exact(dimension)
         .map_err(|_| allocation_error(dimension))?;
-    for row in 0..dimension {
-        let mut value = 0.0;
-        for index in 0..dimension {
-            value += inverse_lower[(index, row)] * eigenvectors[(index, column)];
+    if let Some(inverse_lower) = inverse_lower {
+        for row in 0..dimension {
+            let mut value = 0.0;
+            for index in 0..dimension {
+                value += inverse_lower[(index, row)] * eigenvectors[(index, column)];
+            }
+            if !value.is_finite() {
+                return Err(EigensolveFaerError::ExternalSolver {
+                    operation,
+                    reason: "eigenvector is not finite",
+                });
+            }
+            values.push(value);
         }
-        if !value.is_finite() {
-            return Err(EigensolveFaerError::ExternalSolver {
-                reason: "eigenvector is not finite",
-            });
+    } else {
+        for row in 0..dimension {
+            if !eigenvectors[(row, column)].is_finite() {
+                return Err(EigensolveFaerError::ExternalSolver {
+                    operation,
+                    reason: "eigenvector is not finite",
+                });
+            }
         }
-        values.push(value);
+        for row in 0..dimension {
+            let value = eigenvectors[(row, column)];
+            values.push(if value == 0.0 { 0.0 } else { value });
+        }
     }
-    let mass_norm_squared = mass_inner_product(problem.mass(), &values, &values)?;
+    let mass_norm_squared = if inverse_lower.is_some() {
+        mass_inner_product(problem.mass(), &values, &values)?
+    } else {
+        let mut sum = 0.0;
+        for value in &values {
+            sum += value * value;
+        }
+        sum
+    };
     if !mass_norm_squared.is_finite() || mass_norm_squared <= 0.0 {
         return Err(EigensolveFaerError::NonPositiveMassMatrix);
     }
@@ -348,6 +641,7 @@ fn canonicalized_vector(
         .enumerate()
         .max_by(|(_, left), (_, right)| left.abs().total_cmp(&right.abs()))
         .ok_or(EigensolveFaerError::ExternalSolver {
+            operation,
             reason: "eigenvector is empty",
         })?;
     if *maximum.1 < 0.0 {
@@ -391,18 +685,30 @@ fn same_eigenvalue(left: f64, right: f64) -> bool {
     left == right
 }
 
-fn residual_converged(pair: &Eigenpair, config: EigensolveConfig) -> bool {
-    let residual = pair.residual();
-    if config.absolute_tolerance() == 0.0 && config.relative_tolerance() == 0.0 {
-        residual.absolute() == 0.0
-    } else {
-        residual.absolute() <= config.absolute_tolerance()
-            || residual.relative() <= config.relative_tolerance()
-    }
-}
-
 fn allocation_error(requested: usize) -> EigensolveFaerError {
     EigensolveFaerError::Linear(LinearError::AllocationFailure { requested })
+}
+
+fn try_workspace(request: faer::dyn_stack::StackReq) -> Result<MemBuffer, EigensolveFaerError> {
+    let layout = request
+        .layout()
+        .map_err(|_| LinearError::CapacityOverflow {
+            requested: usize::MAX,
+        })?;
+    MemBuffer::try_new(request).map_err(|_| allocation_error(layout.size()))
+}
+
+fn try_filled<T: Clone>(length: usize, value: T) -> Result<Vec<T>, EigensolveFaerError> {
+    length
+        .checked_mul(core::mem::size_of::<T>())
+        .filter(|&bytes| bytes <= isize::MAX as usize)
+        .ok_or(LinearError::CapacityOverflow { requested: length })?;
+    let mut values = Vec::new();
+    values
+        .try_reserve_exact(length)
+        .map_err(|_| allocation_error(length))?;
+    values.resize(length, value);
+    Ok(values)
 }
 
 #[cfg(test)]

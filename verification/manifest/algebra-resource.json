@@ -1,0 +1,1 @@
+{"domain":"neco.algebra","maxBatchCases":2000,"resourceLimits":{"cpuTimeSeconds":60,"memoryBytes":8589934592,"stdoutPayloadBytes":67108864,"timeoutSeconds":120},"resourceRevision":"algebra-resource-v1","schema":"neco.verification.resource-declaration.v1"}

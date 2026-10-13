@@ -2,32 +2,30 @@
 
 [日本語](README-ja.md)
 
-`neco-monomial` provides monomials that represent radicals exactly. A monomial carries a reduced rational exponent for each prime base, which makes values such as `sqrt(12) = 2 sqrt(3)` exact rather than approximate.
+`neco-monomial` is a crate that provides monomials for representing radicals exactly.
+A monomial carries a reduced rational exponent for each prime base, so values such as $ \sqrt{12} = 2\sqrt{3} $ are handled without any approximation.
 
-Dependencies:
+The only direct dependency is `neco-bigint`.
 
-- `neco-bigint`
-
-## Features
+## Provided operations
 
 - Construction inputs that allow composite and repeated bases
-- Normalization to canonical prime bases through finite trial division
-- Multiplication, division by nonzero values, and reduced rational powers
-- Unique decomposition into a rational coefficient and a `RadicalBasis`
-- Ordered error sets that report every invalid zero power at once
+- Normalization to a normal form with prime bases through finite trial division
+- Multiplication, division by nonzero values, and powers with reduced rational exponents
+- Unique decomposition into a rational coefficient and a radical basis (`RadicalBasis`)
+- A check that reports, at once and as an ordered set, every power whose exponent has a zero denominator and every invalid zero power (`0^0` or a negative power of zero)
 
-The design extends positional exponents from integers to rationals: integer exponents express rationals, and noninteger exponents express radicals. The normal form is a sign with ascending prime exponents, and it holds values like these:
+This monomial can be regarded as an extension of the exponent attached to each prime in the prime factorization of an integer from integers to rationals.
+Integer exponents represent rationals, and non-integer exponents represent radicals.
+The normal form of a monomial consists of a sign and a sequence of exponents ordered by ascending prime, and it holds values as follows.
 
-```text
-sqrt(12) = 2^1 * 3^(1/2)
-sqrt(2) * sqrt(8) = 2^(1/2) * 2^(3/2) = 2^2 = 4
-```
+$$ \sqrt{12} = 2^{1} \cdot 3^{1/2}, \qquad \sqrt{2} \cdot \sqrt{8} = 2^{1/2} \cdot 2^{3/2} = 2^{2} = 4 $$
 
-`split_radical` separates a monomial into a rational coefficient and a radical basis.
+`split_radical` decomposes $ 2^{1} \cdot 3^{1/2} $ into the rational coefficient $ 2 $ and the radical basis $ 3^{1/2} $.
 
 ## Usage
 
-This example normalizes the square root of 12 and splits it into the coefficient `2` and the basis `sqrt(3)`:
+This example normalizes the square root of 12 and decomposes it into the coefficient 2 and the basis $ \sqrt{3} $.
 
 ```rust
 use neco_bigint::{BigInt, BigUint, RawRational};
@@ -54,53 +52,45 @@ fn main() {
 ## Public types
 
 - `RawPower`: a nonnegative construction base and an unreduced exponent
-- `RawMonomial`: an explicit zero, or a sign and construction powers
-- `NormalizationErrors`: an ordered set of distinct normalization failures
-- `MonomialErrorKind`: failures from normalization and monomial operations
-- `ProvenPrime`: a value proven prime by trial division
-- `Monomial`: the normal form, either zero or a sign with ascending prime exponents
-- `RadicalBasis`: prime exponents restricted to `0 < exponent < 1`
+- `RawMonomial`: an explicit zero, or a sign and a sequence of construction factors
+- `NormalizationErrors`: a set of normalization failures, deduplicated and ordered
+- `MonomialErrorKind`: failures returned by monomial operations and normalization
+- `ProvenPrime`: a value confirmed prime by trial division
+- `Monomial`: the normal form, either zero or a sign with a sequence of exponents over ascending primes
+- `RadicalBasis`: a sequence of prime exponents whose exponents satisfy `0 < exponent < 1`
 
-Canonical types have private fields, and owning values are copied through `try_clone`.
+The fields of the normal forms are private, and owned values are cloned with `try_clone`.
+`NormalizationErrors` has operations that construct a value from failures, an operation that visits the owned failures, and an operation that takes them out.
+A `RadicalBasis` value is constructed after its sequence of factors is validated.
 
-The supporting operations:
-
-- `NormalizationErrors::from_one`: construct from one failure
-- `NormalizationErrors::from_errors`: sort a failure sequence and construct
-- `NormalizationErrors::errors`: visit the first and additional failures in order
-- `NormalizationErrors::into_parts`: transfer the owned first and additional failures
-- `RadicalBasis::try_from_sorted_factors`: validate strictly ascending distinct primes with exponents strictly between zero and one
+- `NormalizationErrors::from_one`: constructs from one failure
+- `NormalizationErrors::from_errors`: sorts a sequence of failures and constructs
+- `NormalizationErrors::errors`: visits the first failure and the additional failures in order
+- `NormalizationErrors::into_parts`: takes out the owned failures, split into the first and the additional ones
+- `RadicalBasis::try_from_sorted_factors`: constructs after validating strictly ascending distinct primes with exponents strictly between 0 and 1
 
 ## Failures
 
-`MonomialErrorKind` distinguishes these conditions:
+`MonomialErrorKind` distinguishes failure conditions by kind.
 
 - `DivisionByZero`: the divisor is zero
-- `ZeroToNegativePower`: zero raised to a negative power
-- `UndefinedZeroPower`: `0^0`
-- `EvenRootOfNegative`: an even root of a negative value
-- `InvalidRadicalBasis`: the basis sequence fails validation
-- `CapacityOverflow`: a checked capacity is exceeded
-- `AllocationFailure { requested_elements }`: allocation fails; the payload is the total required element count
-- `Bigint(BigintError)`: a failure from the underlying crate
+- `ZeroToNegativePower`: zero was raised to a negative power
+- `UndefinedZeroPower`: `0^0` was requested
+- `EvenRootOfNegative`: an even root of a negative value was requested
+- `InvalidRadicalBasis`: the basis sequence failed validation
+- `CapacityOverflow`: the capacity limit checked before the operation was exceeded
+- `AllocationFailure { requested_elements }`: allocation failed; holds the required total element count
+- `Bigint(BigintError)`: a failure from the lower crate
 
-Normalization collects the semantic failures found in the input and returns them as `NormalizationErrors`. Capacity overflow and allocation refusal stop the operation immediately and return a single error.
+When the input contains powers whose exponent has a zero denominator, `0^0`, or negative powers of zero, normalization collects each of these failures and returns them deduplicated and ordered as `NormalizationErrors`.
+Capacity overflow and allocation refusal stop the operation immediately and are returned as a single failure.
 
 ## Runtime configuration
 
-The default configuration uses the standard library:
+The standard library is used by default.
+Disabling default features selects the `core + alloc` configuration, which assumes only dynamic memory allocation.
 
-```text
-std
-```
-
-Disabling default features selects a minimal configuration that assumes only dynamic allocation:
-
-```text
-core + alloc
-```
-
-Values and failures are identical in both configurations.
+Value behavior and failure kinds are the same in both configurations.
 
 ## License
 

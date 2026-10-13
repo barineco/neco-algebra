@@ -1,0 +1,1 @@
+{"cases":[{"caseId":"tampered-observation-001","input":{"denominator":"6","numerator":"8"},"observation":{"kind":"success","value":{"denominator":"3","numerator":"5"}},"operation":"rational-reduction"}],"schema":"neco.algebra.observation-batch.v1"}

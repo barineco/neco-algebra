@@ -2,32 +2,33 @@
 
 [日本語](README-ja.md)
 
-`neco-formsum` provides exact rational linear combinations (formal sums) of normalized radical monomials. A value remains symbolic through arithmetic, equality is decided on its unique sparse normal form, and sign determination uses certified dyadic enclosures.
+`neco-formsum` is a crate for exact rational linear combinations (formal sums) of normalized radical monomials.
+Values stay symbolic during computation, and equality of values is decided by comparing the structure of sparse normal forms.
+Sign decisions use dyadic intervals proved to contain the exact value.
 
 ## Input and normal form
 
-Construction and canonical values have these roles:
+The roles of construction inputs and the normal form are split across types and operations:
 
 - `RawTerm`: an unreduced rational coefficient and a construction monomial
-- `RawFormSum::normalize`: validation and normalization of every input
-- `FormSum`: lexicographically ordered distinct bases with nonzero coefficients
+- `RawFormSum::normalize`: validates and normalizes every input
+- `FormSum`: a normal form with distinct bases in lexicographic order and nonzero coefficients
 
-Normalization moves rational factors into coefficients, combines terms that share a `RadicalBasis`, and removes terms whose coefficient becomes zero. A sum with no remaining terms is zero. For example, the value
+Normalization moves rational factors of monomials into coefficients, combines terms that share a `RadicalBasis`, and removes terms whose coefficient becomes zero.
+A formal sum with no terms left after normalization represents zero.
+For example, the following value is a normal form of three terms with coefficients `1, 2, -1` over the bases `1, 2^(1/2), 3^(1/2)`.
 
-```text
-1 + 2 sqrt(2) - sqrt(3)
-```
+$$ 1 + 2\sqrt{2} - \sqrt{3} $$
 
-is a three-term normal form with coefficients `1, 2, -1` over the bases `1, 2^(1/2), 3^(1/2)`.
-
-Normalization is independent of input order. When the input contains semantic errors, it returns a sorted, deduplicated `NormalizationErrors<FormSumErrorKind>`. A failure that stops the computation is returned as a single error.
+The result of normalization is the same regardless of input order.
+When the input contains a coefficient or exponent with a zero denominator, `0^0`, or a negative power of zero, these failures are returned as a sorted and deduplicated `NormalizationErrors<FormSumErrorKind>`.
+When a failure prevents the computation from continuing, processing stops there and the failure is returned as a single error.
 
 ## Exact arithmetic
 
-`FormSum` supports addition, subtraction, multiplication, division, and inversion, and every result comes back normalized. Division and inversion solve exact rational linear systems in a finite radical extension.
-
-- `FormSum`: the input and result of exact arithmetic
-- `FormSumErrorKind::DivisionByZero`: division by zero
+Formal sums provide addition, subtraction, multiplication, division, and inversion, and return every result in normal form.
+Division and inversion are computed by solving exact linear systems with rational coefficients over a finite radical extension.
+Division by zero returns `FormSumErrorKind::DivisionByZero`.
 
 ```rust
 use neco_formsum::FormSum;
@@ -45,48 +46,53 @@ fn main() -> Result<(), neco_formsum::FormSumErrorKind> {
 
 ## Finite radical extensions
 
-`extension_with` constructs the smallest shared extension containing two values.
-For example, adjoining the square roots of 2 and 3 produces a basis of dimension 4.
-`RadicalExtension` exposes its ascending prime sequence, exponent denominators, and basis count.
-The basis uses mixed-radix order with the last coordinate changing fastest.
+`extension_with` constructs the smallest common extension that contains both values.
+For example, the smallest extension containing $ \sqrt{2} $ and $ \sqrt{3} $ is $ \mathbb{Q}(\sqrt{2}, \sqrt{3}) $, which has a basis of dimension $ D = 4 $.
+`RadicalExtension` exposes its ascending prime sequence, its exponent denominators, and its basis count.
+The basis is ordered in mixed-radix order, with the last coordinate changing fastest.
+The coordinate representation treats a formal sum as a sequence of rational coefficients with respect to this basis.
 
-Coordinate operations have these roles:
+- `coordinates_with`: represents a value in coordinates over an extension that contains the required primes and denominators
+- `RadicalCoordinates`: reconstructs the formal sum and produces the column-major multiplication matrix
 
-- `coordinates_with`: represent a value in an extension containing every required prime and denominator
-- `RadicalCoordinates`: reconstruct the formal sum and produce the column-major multiplication matrix
+A matrix index is computed by the following expression.
 
-The matrix uses column-major indexing. The entry at row i and column j is the coefficient of the i-th basis element in the product of the value with the j-th basis element.
+```text
+row + D * column
+```
 
-`annihilating_coefficients` returns a primitive integer annihilating polynomial. Coefficients are ordered from degree zero upward, and the highest-degree coefficient is positive.
+That entry is the coefficient of the basis element selected by the row in the product of the value with the basis element selected by the column.
+
+`annihilating_coefficients` returns a primitive annihilating polynomial with integer coefficients.
+The coefficients are ordered from the lowest degree upward, and the highest-degree coefficient is positive.
 
 ## Enclosures and sign
 
-- `enclose(bits)`: an interval containing the exact value with width at most `2^-bits`
-- `sign`: a structural zero test, then the sign proved by an interval excluding zero
+- `enclose(bits)`: returns an interval containing the exact value with width at most `2^-bits`
+- `sign`: first checks whether the term list of the normal form is empty (the value is zero), and if the value is nonzero, obtains the sign from an interval that excludes zero
 
-Radical interval certificates use only integer power inequalities.
+Radical intervals are constructed using only integer power inequalities as evidence.
 
 ## Failures and allocation
 
-Failure types have these roles:
+The public failure types represent the kinds of failure and the subject of a dimension overflow:
 
-- `FormSumErrorKind`: lower-layer failures, division by zero, dimension overflow, and allocation refusal
-- `DimensionResource`: exponent denominators, basis counts, and matrix element counts
+- `FormSumErrorKind`: lower-crate failures, division by zero, dimension overflow, and allocation refusal
+- `DimensionResource`: distinguishes the subject of a dimension overflow (exponent denominators, basis counts, and matrix element counts)
 
-Types that own variable-length storage provide `try_clone`, so an allocation failure during cloning remains visible through `Result`.
+Types that own variable-length storage provide `try_clone`, so an allocation failure during cloning is received through `Result`.
 
-## Features
+## Features and dependencies
 
-The default `std` feature provides standard error integration and enables the same feature in both dependencies. Disabling default features selects the `core + alloc` configuration with the same values and the same failures:
+With the default `std` feature enabled, `FormSumErrorKind` can be used as a standard error type.
+This feature also enables the feature of the same name in both dependencies.
+Disabling default features selects the `core + alloc` configuration, which handles the same values and the same failures.
 
 ```console
 cargo check -p neco-formsum --no-default-features
 ```
 
-Runtime dependencies:
-
-- `neco-bigint`
-- `neco-monomial`
+At runtime, the crate depends on `neco-bigint` and `neco-monomial`.
 
 ## License
 

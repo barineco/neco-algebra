@@ -8,7 +8,6 @@ use crate::{
 #[derive(Debug, Eq, PartialEq)]
 pub struct Resolver;
 
-#[allow(clippy::new_without_default)]
 impl Resolver {
     pub const fn new() -> Self {
         Self
@@ -48,6 +47,12 @@ impl Resolver {
     }
 }
 
+impl Default for Resolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn insert_consumer_result(
     resolved: &mut ResolvedValues,
     consumer: ConsumerId,
@@ -58,7 +63,6 @@ fn insert_consumer_result(
         .map_err(ResolveError::Storage)
 }
 
-#[allow(clippy::too_many_arguments)]
 fn resolve_consumer(
     consumer: ConsumerId,
     expr: ExprId,
@@ -84,8 +88,12 @@ fn resolve_consumer(
     match CertifiedF64::resolve(&value, expr, bits, isolation) {
         Ok(value) => Ok(Ok(value)),
         Err(FloatError::OutOfRange) => Ok(Err(ResolveError::FloatOutOfRange { consumer, expr })),
-        Err(FloatError::Bigint(error)) => Ok(Err(ResolveError::Bigint(error))),
-        Err(FloatError::Algnum(error)) => Ok(Err(ResolveError::Algnum(error))),
+        Err(FloatError::Bigint(error) | FloatError::EnclosureBigint { error, .. }) => {
+            Ok(Err(ResolveError::Bigint(error)))
+        }
+        Err(FloatError::Algnum(error) | FloatError::EnclosureAlgnum { error, .. }) => {
+            Ok(Err(ResolveError::Algnum(error)))
+        }
         Err(FloatError::Storage(error)) => Err(error),
     }
 }

@@ -365,7 +365,10 @@ fn summarize_eigenspaces(
     let converged_modes = eigenspaces
         .iter()
         .flat_map(|space| space.basis())
-        .filter(|pair| residual_converged(pair, config))
+        .filter(|pair| {
+            pair.residual()
+                .meets_tolerance(config.absolute_tolerance, config.relative_tolerance)
+        })
         .count();
     Ok(EigenspaceSummary {
         eigenspaces,
@@ -429,7 +432,7 @@ fn validate_identity_mass(matrix: &DenseMatrix<f64>) -> Result<(), EigensolveErr
             let expected = if row == column { 1.0 } else { 0.0 };
             if value != expected {
                 return Err(EigensolveError::UnsupportedMassMatrix {
-                    reason: "the first engine requires the exact identity matrix",
+                    reason: "the Jacobi engine requires the exact identity matrix",
                 });
             }
         }
@@ -635,16 +638,6 @@ fn eigenvalue_ordering(
 /// Only exactly equal computed eigenvalues share one eigenspace.
 fn same_eigenvalue(left: f64, right: f64) -> bool {
     left == right
-}
-
-fn residual_converged(pair: &Eigenpair, config: &EigensolveConfig) -> bool {
-    let residual = pair.residual();
-    if config.absolute_tolerance == 0.0 && config.relative_tolerance == 0.0 {
-        residual.absolute() == 0.0
-    } else {
-        residual.absolute() <= config.absolute_tolerance
-            || residual.relative() <= config.relative_tolerance
-    }
 }
 
 /// Makes the first maximum-magnitude component positive to canonicalize the

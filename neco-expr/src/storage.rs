@@ -50,7 +50,6 @@ pub struct ResolvedValues {
     entries: Vec<(ConsumerId, Result<CertifiedF64, ResolveError>)>,
 }
 
-#[allow(clippy::len_without_is_empty, clippy::new_without_default)]
 impl AtomStore {
     pub fn new() -> Self {
         Self {
@@ -60,6 +59,10 @@ impl AtomStore {
 
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
     }
 
     pub fn get(&self, id: AtomId) -> Option<&ExactValue> {
@@ -100,6 +103,12 @@ impl AtomStore {
     }
 }
 
+impl Default for AtomStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn atom_value_error(error: EvalError) -> InsertError {
     InsertError::Value(atom_value_payload(error))
 }
@@ -108,7 +117,6 @@ fn atom_value_payload(error: EvalError) -> EvalError {
     error
 }
 
-#[allow(clippy::len_without_is_empty, clippy::new_without_default)]
 impl PrecisionRequirements {
     pub fn new() -> Self {
         Self {
@@ -118,6 +126,10 @@ impl PrecisionRequirements {
 
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
     }
 
     pub fn get(&self, id: ConsumerId) -> Option<AbsoluteBits> {
@@ -155,7 +167,12 @@ impl PrecisionRequirements {
     }
 }
 
-#[allow(clippy::len_without_is_empty, clippy::new_without_default)]
+impl Default for PrecisionRequirements {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Assignments {
     pub fn new() -> Self {
         Self {
@@ -165,6 +182,10 @@ impl Assignments {
 
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
     }
 
     pub fn get(&self, id: ConsumerId) -> Option<ExprId> {
@@ -202,7 +223,12 @@ impl Assignments {
     }
 }
 
-#[allow(clippy::len_without_is_empty, clippy::new_without_default)]
+impl Default for Assignments {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EvaluationCache {
     pub(crate) fn new() -> Self {
         Self {
@@ -212,6 +238,10 @@ impl EvaluationCache {
 
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
     }
 
     pub fn get(&self, id: ExprId) -> Option<&Result<ExactValue, EvalError>> {
@@ -245,7 +275,6 @@ impl EvaluationCache {
     }
 }
 
-#[allow(clippy::len_without_is_empty)]
 impl IsolationCache {
     pub(crate) fn new() -> Self {
         Self {
@@ -255,6 +284,10 @@ impl IsolationCache {
 
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
     }
 
     pub fn get(&self, id: ExprId, bits: AbsoluteBits) -> Option<&IsolatingInterval> {
@@ -276,7 +309,6 @@ impl IsolationCache {
     }
 }
 
-#[allow(clippy::len_without_is_empty)]
 impl ResolvedValues {
     pub(crate) fn new() -> Self {
         Self {
@@ -286,6 +318,10 @@ impl ResolvedValues {
 
     pub fn len(&self) -> usize {
         self.entries.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
     }
 
     pub fn get(&self, id: ConsumerId) -> Option<&Result<CertifiedF64, ResolveError>> {
@@ -421,11 +457,21 @@ pub(crate) enum InjectedFailure {
 #[cfg(test)]
 std::thread_local! {
     static INJECTED_FAILURE: core::cell::Cell<Option<(StorageResource, InjectedFailure)>> = const { core::cell::Cell::new(None) };
+    static INJECTED_SKIP: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
 fn injected_failure(resource: StorageResource, requested_elements: usize) -> Option<StorageError> {
     INJECTED_FAILURE.with(|configured| {
+        if matches!(configured.get(), Some((expected, _)) if expected == resource)
+            && INJECTED_SKIP.with(|skip| {
+                let remaining = skip.get();
+                skip.set(remaining.saturating_sub(1));
+                remaining > 0
+            })
+        {
+            return None;
+        }
         let error = match configured.get() {
             Some((expected, InjectedFailure::Capacity)) if expected == resource => {
                 Some(StorageError::CapacityOverflow { resource })
@@ -451,9 +497,21 @@ pub(crate) fn with_injected_failure<R>(
     failure: InjectedFailure,
     operation: impl FnOnce() -> R,
 ) -> R {
+    with_injected_failure_after(resource, failure, 0, operation)
+}
+
+#[cfg(test)]
+pub(crate) fn with_injected_failure_after<R>(
+    resource: StorageResource,
+    failure: InjectedFailure,
+    skipped_calls: usize,
+    operation: impl FnOnce() -> R,
+) -> R {
+    INJECTED_SKIP.with(|skip| skip.set(skipped_calls));
     INJECTED_FAILURE.with(|configured| configured.set(Some((resource, failure))));
     let result = operation();
     INJECTED_FAILURE.with(|configured| configured.set(None));
+    INJECTED_SKIP.with(|skip| skip.set(0));
     result
 }
 

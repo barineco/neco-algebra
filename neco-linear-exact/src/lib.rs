@@ -6,6 +6,7 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
 #[cfg(test)]
@@ -16,8 +17,12 @@ std::thread_local! {
 use neco_algnum::{AlgnumError, RealAlgebraic};
 use neco_bigint::{BigInt, BigintError, Dyadic, ReducedRational};
 use neco_expr::{
-    project_exact_value_f64, CertifiedScalarProjection, ExactValue, ProjectionPolicy,
-    ScalarProjectionError,
+    project_exact_value_f64, AbsoluteBits, CertifiedF64Bundle, CertifiedF64Expression,
+    CertifiedScalarProjection, ComputationProductId, ConsumerId, ExactComputationProduct,
+    ExactValue, ExprId, FailureLocation, FailureOperation, MatrixInputMismatchField,
+    MatrixInputMismatchPayload, MatrixInputRole, NecoFailure, NecoImplementationSource, OwnerId,
+    ProjectionPolicy, ProvenanceMismatchField, ProvenanceMismatchPayload, ProvenanceRecord,
+    ScalarProjectionError, StorageFailurePayload,
 };
 use neco_formsum::{FormSum, FormSumErrorKind};
 use neco_linear_dense::DenseMatrix;
@@ -268,6 +273,769 @@ impl CertifiedMatrixProjection {
             }
             .into(),
         )
+    }
+}
+pub trait MatrixIndex {
+    fn value(self) -> usize;
+}
+
+impl MatrixIndex for usize {
+    fn value(self) -> usize {
+        self
+    }
+}
+
+impl MatrixIndex for RowIndex {
+    fn value(self) -> usize {
+        RowIndex::value(self)
+    }
+}
+
+impl MatrixIndex for ColumnIndex {
+    fn value(self) -> usize {
+        ColumnIndex::value(self)
+    }
+}
+#[derive(Debug, PartialEq)]
+pub struct CertifiedMatrixEntry<'a> {
+    row: usize,
+    column: usize,
+    expression: ExprId,
+    value: &'a CertifiedF64Expression,
+}
+
+impl CertifiedMatrixEntry<'_> {
+    pub const fn row(&self) -> usize {
+        self.row
+    }
+
+    pub const fn column(&self) -> usize {
+        self.column
+    }
+
+    pub const fn expression(&self) -> ExprId {
+        self.expression
+    }
+
+    pub const fn owner(&self) -> OwnerId {
+        self.value.owner()
+    }
+
+    pub const fn consumer_id(&self) -> ConsumerId {
+        self.value.consumer_id()
+    }
+
+    pub const fn precision(&self) -> AbsoluteBits {
+        self.value.precision()
+    }
+
+    pub const fn source(&self) -> NecoImplementationSource {
+        self.value.source()
+    }
+
+    pub fn certified(&self) -> &neco_expr::CertifiedF64 {
+        self.value.certified()
+    }
+
+    pub fn value(&self) -> f64 {
+        self.certified().value()
+    }
+
+    pub fn enclosure(&self) -> &neco_bigint::DyadicEnclosure {
+        self.certified().enclosure()
+    }
+
+    pub fn absolute_error_bound(&self) -> &Dyadic {
+        self.certified().absolute_error()
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct CertifiedMatrixInput {
+    matrix: DenseMatrix<f64>,
+    projection: CertifiedF64Bundle,
+    entry_expressions: Vec<ExprId>,
+    product_identity: ComputationProductId,
+    absolute_error_bound: Dyadic,
+}
+
+impl CertifiedMatrixInput {
+    pub fn from_product_projection<E>(
+        product: &ExactComputationProduct,
+        projection: &CertifiedF64Bundle,
+        matrix: DenseMatrix<f64>,
+        entry_expressions: E,
+        owner: OwnerId,
+        consumer: ConsumerId,
+    ) -> Result<Self, NecoFailure>
+    where
+        E: Into<Vec<ExprId>>,
+    {
+        let entry_expressions = entry_expressions.into();
+        let shape = matrix.shape();
+        let first_matrix_location = if shape.rows() > 0 && shape.columns() > 0 {
+            Some((0, 0))
+        } else {
+            None
+        };
+        let product_identity = product.product_identity().clone();
+        let expected_bundle = product.certified_descent(owner, consumer);
+        let expected_precision = expected_bundle
+            .map(CertifiedF64Bundle::precision)
+            .unwrap_or_else(|| projection.precision());
+        let expected_source = expected_bundle
+            .map(CertifiedF64Bundle::source)
+            .unwrap_or_else(|| projection.source());
+        let expected = matrix_provenance(
+            owner,
+            consumer,
+            expected_precision,
+            expected_source,
+            &product_identity,
+        );
+        let actual = matrix_provenance(
+            projection.owner(),
+            projection.consumer_id(),
+            projection.precision(),
+            projection.source(),
+            projection.product_identity(),
+        );
+        if let Some(field) = provenance_mismatch_field(&expected, &actual) {
+            return Err(NecoFailure::ProvenanceMismatch {
+                location: matrix_location(MatrixInputRole::Matrix, consumer, first_matrix_location),
+                payload: Box::new(ProvenanceMismatchPayload::new(field, expected, actual)),
+            });
+        }
+
+        let expected_count = shape.element_count().map_err(|_| {
+            matrix_mismatch(
+                matrix_location(MatrixInputRole::Matrix, consumer, None),
+                MatrixInputMismatchField::Shape,
+                expected.clone(),
+                actual.clone(),
+            )
+        })?;
+        if entry_expressions.len() < expected_count {
+            return Err(matrix_mismatch(
+                matrix_location(MatrixInputRole::Matrix, consumer, None),
+                MatrixInputMismatchField::MissingExpression,
+                expected.clone(),
+                actual.clone(),
+            ));
+        }
+        if entry_expressions.len() > expected_count {
+            return Err(matrix_mismatch(
+                matrix_location(MatrixInputRole::Matrix, consumer, None),
+                MatrixInputMismatchField::ExtraExpression,
+                expected.clone(),
+                actual.clone(),
+            ));
+        }
+        if projection.values().len() < expected_count {
+            return Err(matrix_mismatch(
+                matrix_location(MatrixInputRole::Matrix, consumer, None),
+                MatrixInputMismatchField::MissingExpression,
+                expected.clone(),
+                actual.clone(),
+            ));
+        }
+        if projection.values().len() > expected_count {
+            return Err(matrix_mismatch(
+                matrix_location(MatrixInputRole::Matrix, consumer, None),
+                MatrixInputMismatchField::ExtraExpression,
+                expected.clone(),
+                actual.clone(),
+            ));
+        }
+
+        for (index, expression) in entry_expressions.iter().copied().enumerate() {
+            if entry_expressions[..index].contains(&expression) {
+                let (row, column) = row_column(shape, index);
+                return Err(matrix_mismatch_with_details(
+                    matrix_location(MatrixInputRole::Matrix, consumer, Some((row, column))),
+                    MatrixInputMismatchField::DuplicateExpression,
+                    expected.clone(),
+                    actual.clone(),
+                    MismatchDetails {
+                        expected_expr: Some(expression),
+                        actual_expr: Some(expression),
+                        ..Default::default()
+                    },
+                ));
+            }
+        }
+
+        let mut absolute_error_bound = Dyadic::from_f64_exact(0.0)
+            .map_err(|error| storage_failure(MatrixInputRole::Matrix, consumer, error))?;
+        for (index, expression) in entry_expressions.iter().copied().enumerate() {
+            let (row, column) = row_column(shape, index);
+            let location = matrix_location(MatrixInputRole::Matrix, consumer, Some((row, column)));
+            let Some(value) = projection.values().get(index) else {
+                return Err(matrix_mismatch_with_details(
+                    location,
+                    MatrixInputMismatchField::MissingExpression,
+                    expected.clone(),
+                    actual.clone(),
+                    MismatchDetails {
+                        expected_expr: Some(expression),
+                        ..Default::default()
+                    },
+                ));
+            };
+            if value.expr() != expression {
+                return Err(matrix_mismatch_with_details(
+                    location,
+                    MatrixInputMismatchField::Expression,
+                    expected.clone(),
+                    actual.clone(),
+                    MismatchDetails {
+                        expected_expr: Some(expression),
+                        actual_expr: Some(value.expr()),
+                        ..Default::default()
+                    },
+                ));
+            }
+            let matching = projection
+                .values()
+                .iter()
+                .filter(|candidate| candidate.expr() == expression)
+                .count();
+            if matching > 1 {
+                return Err(matrix_mismatch_with_details(
+                    location,
+                    MatrixInputMismatchField::DuplicateExpression,
+                    expected.clone(),
+                    actual.clone(),
+                    MismatchDetails {
+                        expected_expr: Some(expression),
+                        actual_expr: Some(expression),
+                        ..Default::default()
+                    },
+                ));
+            }
+            if matching == 0 {
+                return Err(matrix_mismatch_with_details(
+                    location,
+                    MatrixInputMismatchField::MissingExpression,
+                    expected.clone(),
+                    actual.clone(),
+                    MismatchDetails {
+                        expected_expr: Some(expression),
+                        ..Default::default()
+                    },
+                ));
+            }
+            let row_index = shape.row_index(row).map_err(|_| {
+                matrix_mismatch(
+                    location,
+                    MatrixInputMismatchField::Shape,
+                    expected.clone(),
+                    actual.clone(),
+                )
+            })?;
+            let column_index = shape.column_index(column).map_err(|_| {
+                matrix_mismatch(
+                    location,
+                    MatrixInputMismatchField::Shape,
+                    expected.clone(),
+                    actual.clone(),
+                )
+            })?;
+            let matrix_value = *matrix.value(row_index, column_index).map_err(|_| {
+                matrix_mismatch(
+                    location,
+                    MatrixInputMismatchField::Shape,
+                    expected.clone(),
+                    actual.clone(),
+                )
+            })?;
+            let certified_bits = value.certified().value().to_bits();
+            let matrix_bits = matrix_value.to_bits();
+            if certified_bits != matrix_bits {
+                return Err(matrix_mismatch_with_details(
+                    location,
+                    MatrixInputMismatchField::NumericValue,
+                    expected.clone(),
+                    actual.clone(),
+                    MismatchDetails {
+                        expected_expr: Some(expression),
+                        actual_expr: Some(value.expr()),
+                        expected_bits: Some(certified_bits),
+                        actual_bits: Some(matrix_bits),
+                    },
+                ));
+            }
+            absolute_error_bound = absolute_error_bound
+                .add(value.certified().absolute_error())
+                .map_err(|error| storage_failure(MatrixInputRole::Matrix, consumer, error))?;
+        }
+        for (index, value) in projection.values().iter().enumerate() {
+            if !entry_expressions.contains(&value.expr()) {
+                let (row, column) = row_column(shape, index);
+                return Err(matrix_mismatch_with_details(
+                    matrix_location(MatrixInputRole::Matrix, consumer, Some((row, column))),
+                    MatrixInputMismatchField::ExtraExpression,
+                    expected.clone(),
+                    actual.clone(),
+                    MismatchDetails {
+                        actual_expr: Some(value.expr()),
+                        ..Default::default()
+                    },
+                ));
+            }
+        }
+
+        Ok(Self {
+            matrix,
+            projection: projection.try_clone()?,
+            entry_expressions,
+            product_identity,
+            absolute_error_bound,
+        })
+    }
+
+    pub fn matrix(&self) -> &DenseMatrix<f64> {
+        &self.matrix
+    }
+
+    pub fn shape(&self) -> Shape {
+        self.matrix.shape()
+    }
+
+    pub fn projection(&self) -> &CertifiedF64Bundle {
+        &self.projection
+    }
+
+    pub fn entry_expressions(&self) -> &[ExprId] {
+        &self.entry_expressions
+    }
+
+    pub const fn owner(&self) -> OwnerId {
+        self.projection.owner()
+    }
+
+    pub const fn consumer_id(&self) -> ConsumerId {
+        self.projection.consumer_id()
+    }
+
+    pub const fn precision(&self) -> AbsoluteBits {
+        self.projection.precision()
+    }
+
+    pub const fn source(&self) -> NecoImplementationSource {
+        self.projection.source()
+    }
+
+    pub fn product_identity(&self) -> &ComputationProductId {
+        &self.product_identity
+    }
+
+    pub fn absolute_error_bound(&self) -> &Dyadic {
+        &self.absolute_error_bound
+    }
+
+    pub fn entry<R: MatrixIndex, C: MatrixIndex>(
+        &self,
+        row: R,
+        column: C,
+    ) -> Result<CertifiedMatrixEntry<'_>, NecoFailure> {
+        let row = row.value();
+        let column = column.value();
+        let shape = self.matrix.shape();
+        let Some(index) = row
+            .checked_mul(shape.columns())
+            .and_then(|offset| offset.checked_add(column))
+            .filter(|_| row < shape.rows() && column < shape.columns())
+        else {
+            return Err(matrix_mismatch(
+                matrix_location(
+                    MatrixInputRole::Matrix,
+                    self.consumer_id(),
+                    Some((row, column)),
+                ),
+                MatrixInputMismatchField::Shape,
+                matrix_provenance(
+                    self.owner(),
+                    self.consumer_id(),
+                    self.precision(),
+                    self.source(),
+                    self.product_identity(),
+                ),
+                matrix_provenance(
+                    self.owner(),
+                    self.consumer_id(),
+                    self.precision(),
+                    self.source(),
+                    self.product_identity(),
+                ),
+            ));
+        };
+        let expression = *self.entry_expressions.get(index).ok_or_else(|| {
+            matrix_mismatch(
+                matrix_location(
+                    MatrixInputRole::Matrix,
+                    self.consumer_id(),
+                    Some((row, column)),
+                ),
+                MatrixInputMismatchField::MissingExpression,
+                matrix_provenance(
+                    self.owner(),
+                    self.consumer_id(),
+                    self.precision(),
+                    self.source(),
+                    self.product_identity(),
+                ),
+                matrix_provenance(
+                    self.owner(),
+                    self.consumer_id(),
+                    self.precision(),
+                    self.source(),
+                    self.product_identity(),
+                ),
+            )
+        })?;
+        let value = self
+            .projection
+            .values()
+            .iter()
+            .find(|value| value.expr() == expression)
+            .ok_or_else(|| {
+                matrix_mismatch_with_details(
+                    matrix_location(
+                        MatrixInputRole::Matrix,
+                        self.consumer_id(),
+                        Some((row, column)),
+                    ),
+                    MatrixInputMismatchField::MissingExpression,
+                    matrix_provenance(
+                        self.owner(),
+                        self.consumer_id(),
+                        self.precision(),
+                        self.source(),
+                        self.product_identity(),
+                    ),
+                    matrix_provenance(
+                        self.owner(),
+                        self.consumer_id(),
+                        self.precision(),
+                        self.source(),
+                        self.product_identity(),
+                    ),
+                    MismatchDetails {
+                        expected_expr: Some(expression),
+                        ..Default::default()
+                    },
+                )
+            })?;
+        Ok(CertifiedMatrixEntry {
+            row,
+            column,
+            expression,
+            value,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MassNormalizationMethod {
+    Identity,
+    PositiveDefiniteCholesky,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct MassNormalizationReference {
+    matrix: CertifiedMatrixInput,
+    method: MassNormalizationMethod,
+}
+
+impl MassNormalizationReference {
+    pub fn new(
+        matrix: CertifiedMatrixInput,
+        method: MassNormalizationMethod,
+    ) -> Result<Self, NecoFailure> {
+        Ok(Self { matrix, method })
+    }
+
+    pub fn identity(matrix: CertifiedMatrixInput) -> Self {
+        Self {
+            matrix,
+            method: MassNormalizationMethod::Identity,
+        }
+    }
+
+    pub fn positive_definite_cholesky(matrix: CertifiedMatrixInput) -> Self {
+        Self {
+            matrix,
+            method: MassNormalizationMethod::PositiveDefiniteCholesky,
+        }
+    }
+
+    pub fn matrix(&self) -> &CertifiedMatrixInput {
+        &self.matrix
+    }
+
+    pub const fn method(&self) -> MassNormalizationMethod {
+        self.method
+    }
+
+    pub fn product_identity(&self) -> &ComputationProductId {
+        self.matrix.product_identity()
+    }
+    pub const fn owner(&self) -> OwnerId {
+        self.matrix.owner()
+    }
+
+    pub const fn consumer_id(&self) -> ConsumerId {
+        self.matrix.consumer_id()
+    }
+
+    pub const fn precision(&self) -> AbsoluteBits {
+        self.matrix.precision()
+    }
+
+    pub const fn source(&self) -> NecoImplementationSource {
+        self.matrix.source()
+    }
+
+    pub fn absolute_error_bound(&self) -> &Dyadic {
+        self.matrix.absolute_error_bound()
+    }
+}
+
+pub trait IntoMassNormalizationReference {
+    fn into_mass_normalization_reference(self) -> Option<MassNormalizationReference>;
+}
+
+impl IntoMassNormalizationReference for MassNormalizationReference {
+    fn into_mass_normalization_reference(self) -> Option<MassNormalizationReference> {
+        Some(self)
+    }
+}
+
+impl IntoMassNormalizationReference for Option<MassNormalizationReference> {
+    fn into_mass_normalization_reference(self) -> Option<MassNormalizationReference> {
+        self
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct CertifiedGeneralizedEigenInput {
+    stiffness: CertifiedMatrixInput,
+    mass: MassNormalizationReference,
+}
+
+impl CertifiedGeneralizedEigenInput {
+    pub fn new<M>(stiffness: CertifiedMatrixInput, mass: M) -> Result<Self, NecoFailure>
+    where
+        M: IntoMassNormalizationReference,
+    {
+        let mass =
+            mass.into_mass_normalization_reference()
+                .ok_or(NecoFailure::MissingMatrixInput {
+                    location: matrix_location(
+                        MatrixInputRole::MassNormalization,
+                        stiffness.consumer_id(),
+                        None,
+                    ),
+                })?;
+        let stiffness_shape = stiffness.shape();
+        let mass_shape = mass.matrix().shape();
+        if stiffness_shape != mass_shape {
+            return Err(matrix_mismatch(
+                matrix_location(
+                    MatrixInputRole::MassNormalization,
+                    mass.matrix().consumer_id(),
+                    None,
+                ),
+                MatrixInputMismatchField::Shape,
+                matrix_provenance(
+                    stiffness.owner(),
+                    stiffness.consumer_id(),
+                    stiffness.precision(),
+                    stiffness.source(),
+                    stiffness.product_identity(),
+                ),
+                matrix_provenance(
+                    mass.matrix().owner(),
+                    mass.matrix().consumer_id(),
+                    mass.matrix().precision(),
+                    mass.matrix().source(),
+                    mass.product_identity(),
+                ),
+            ));
+        }
+        let expected = matrix_provenance(
+            stiffness.owner(),
+            stiffness.consumer_id(),
+            stiffness.precision(),
+            stiffness.source(),
+            stiffness.product_identity(),
+        );
+        let actual = matrix_provenance(
+            mass.matrix().owner(),
+            mass.matrix().consumer_id(),
+            mass.matrix().precision(),
+            mass.matrix().source(),
+            mass.product_identity(),
+        );
+        if let Some(field) = generalized_provenance_mismatch_field(&expected, &actual) {
+            return Err(NecoFailure::ProvenanceMismatch {
+                location: matrix_location(
+                    MatrixInputRole::MassNormalization,
+                    mass.matrix().consumer_id(),
+                    None,
+                ),
+                payload: Box::new(ProvenanceMismatchPayload::new(field, expected, actual)),
+            });
+        }
+        Ok(Self { stiffness, mass })
+    }
+
+    pub fn stiffness(&self) -> &CertifiedMatrixInput {
+        &self.stiffness
+    }
+
+    pub fn mass(&self) -> &MassNormalizationReference {
+        &self.mass
+    }
+
+    pub fn product_identity(&self) -> &ComputationProductId {
+        self.stiffness.product_identity()
+    }
+}
+
+fn row_column(shape: Shape, index: usize) -> (usize, usize) {
+    (index / shape.columns(), index % shape.columns())
+}
+
+fn matrix_location(
+    role: MatrixInputRole,
+    consumer: ConsumerId,
+    coordinates: Option<(usize, usize)>,
+) -> FailureLocation {
+    let location = FailureLocation::operation(FailureOperation::Assemble)
+        .with_matrix_role(role)
+        .with_consumer(consumer);
+    match coordinates {
+        Some((row, column)) => location.with_matrix_location(row, column),
+        None => location,
+    }
+}
+
+fn matrix_provenance(
+    owner: OwnerId,
+    consumer: ConsumerId,
+    precision: AbsoluteBits,
+    source: NecoImplementationSource,
+    product_identity: &ComputationProductId,
+) -> ProvenanceRecord {
+    ProvenanceRecord::new(
+        Some(owner),
+        Some(consumer),
+        None,
+        Some(precision),
+        Some(source.revision_identity()),
+        Some(source.public_api_identity()),
+    )
+    .with_product_identity(product_identity.clone())
+}
+
+fn provenance_mismatch_field(
+    expected: &ProvenanceRecord,
+    actual: &ProvenanceRecord,
+) -> Option<ProvenanceMismatchField> {
+    if expected.consumer_id() != actual.consumer_id() {
+        Some(ProvenanceMismatchField::Consumer)
+    } else if expected.owner() != actual.owner() {
+        Some(ProvenanceMismatchField::Owner)
+    } else if expected.expr_id() != actual.expr_id() {
+        Some(ProvenanceMismatchField::Expression)
+    } else if expected.precision() != actual.precision() {
+        Some(ProvenanceMismatchField::Precision)
+    } else if expected.revision_identity() != actual.revision_identity()
+        || expected.public_api_identity() != actual.public_api_identity()
+    {
+        Some(ProvenanceMismatchField::Source)
+    } else if expected.product_identity() != actual.product_identity() {
+        Some(ProvenanceMismatchField::Product)
+    } else {
+        None
+    }
+}
+fn generalized_provenance_mismatch_field(
+    expected: &ProvenanceRecord,
+    actual: &ProvenanceRecord,
+) -> Option<ProvenanceMismatchField> {
+    if expected.owner() != actual.owner() {
+        Some(ProvenanceMismatchField::Owner)
+    } else if expected.precision() != actual.precision() {
+        Some(ProvenanceMismatchField::Precision)
+    } else if expected.revision_identity() != actual.revision_identity()
+        || expected.public_api_identity() != actual.public_api_identity()
+    {
+        Some(ProvenanceMismatchField::Source)
+    } else if expected.product_identity() != actual.product_identity() {
+        Some(ProvenanceMismatchField::Product)
+    } else {
+        None
+    }
+}
+
+fn matrix_payload(
+    location: &FailureLocation,
+    field: MatrixInputMismatchField,
+    expected: ProvenanceRecord,
+    actual: ProvenanceRecord,
+) -> MatrixInputMismatchPayload {
+    let mut payload = MatrixInputMismatchPayload::new(field, expected.clone(), actual.clone())
+        .with_products(expected.product_identity(), actual.product_identity());
+    if let (Some(row), Some(column)) = (location.row(), location.column()) {
+        payload = payload.with_location(row, column);
+    }
+    payload
+}
+
+fn matrix_mismatch(
+    location: FailureLocation,
+    field: MatrixInputMismatchField,
+    expected: ProvenanceRecord,
+    actual: ProvenanceRecord,
+) -> NecoFailure {
+    NecoFailure::MatrixInputMismatch {
+        payload: Box::new(matrix_payload(&location, field, expected, actual)),
+        location,
+    }
+}
+
+#[derive(Default)]
+struct MismatchDetails {
+    expected_expr: Option<ExprId>,
+    actual_expr: Option<ExprId>,
+    expected_bits: Option<u64>,
+    actual_bits: Option<u64>,
+}
+
+fn matrix_mismatch_with_details(
+    location: FailureLocation,
+    field: MatrixInputMismatchField,
+    expected: ProvenanceRecord,
+    actual: ProvenanceRecord,
+    details: MismatchDetails,
+) -> NecoFailure {
+    NecoFailure::MatrixInputMismatch {
+        payload: Box::new(
+            matrix_payload(&location, field, expected, actual)
+                .with_expressions(details.expected_expr, details.actual_expr)
+                .with_value_bits(details.expected_bits, details.actual_bits),
+        ),
+        location,
+    }
+}
+
+fn storage_failure(role: MatrixInputRole, consumer: ConsumerId, error: BigintError) -> NecoFailure {
+    NecoFailure::StorageFailure {
+        location: matrix_location(role, consumer, None),
+        payload: Box::new(StorageFailurePayload::Bigint(error)),
     }
 }
 
@@ -1336,7 +2104,7 @@ mod tests {
     }
 
     #[test]
-    fn ncad015_composability_uses_only_the_public_exact_linear_types() {
+    fn composability_uses_only_the_public_exact_linear_types() {
         fn fit_system<T: ExactScalar>(
             coefficients: ExactMatrix<T>,
             samples: &Vector<T>,

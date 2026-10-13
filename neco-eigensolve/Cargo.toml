@@ -1,6 +1,6 @@
 [package]
 name = "neco-eigensolve"
-version = "0.2.1"
+version = "0.2.3"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -23,8 +23,14 @@ std = [
 ]
 
 [dependencies]
-neco-complex = { path = "../neco-complex", version = "=0.2.0", default-features = false }
-neco-generalized-eigen = { path = "../neco-generalized-eigen", version = "=0.2.0", default-features = false }
-neco-linear-dense = { path = "../neco-linear-dense", version = "=0.1.0", default-features = false }
-neco-linear-types = { path = "../neco-linear-types", version = "=0.1.0", default-features = false }
-neco-sparse = { path = "../neco-sparse", version = "=0.2.0", default-features = false }
+neco-complex = { path = "../neco-complex", version = "=0.2.1", default-features = false }
+neco-generalized-eigen = { path = "../neco-generalized-eigen", version = "=0.2.2", default-features = false }
+neco-linear-dense = { path = "../neco-linear-dense", version = "=0.1.1", default-features = false }
+neco-linear-types = { path = "../neco-linear-types", version = "=0.1.1", default-features = false }
+neco-sparse = { path = "../neco-sparse", version = "=0.2.1", default-features = false }
+
+[dev-dependencies]
+neco-bigint = { path = "../neco-bigint", version = "=0.1.2" }
+neco-expr = { path = "../neco-expr", version = "=0.2.0" }
+neco-formsum = { path = "../neco-formsum", version = "=0.1.2" }
+neco-linear-exact = { path = "../neco-linear-exact", version = "=0.2.0" }

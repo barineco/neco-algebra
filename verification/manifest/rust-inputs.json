@@ -1,0 +1,1 @@
+{"forbidden":["lean-source","lean-executable","lean-output","observer"],"kind":"input-isolation.v1","permitted":["observation-protocol","projection-declaration","../manifest/algebra-projection-declaration.json","protocol","public-rust-api","rust-producer-output-scope"],"role":"rust-producer","toolchain":{"rust":"workspace-selected","source":"public-rust-api-only"}}

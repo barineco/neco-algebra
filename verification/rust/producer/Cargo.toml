@@ -1,0 +1,20 @@
+[package]
+name = "neco-algebra-producer"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+neco-algebra-protocol-model = { path = "../protocol-model" }
+neco-bigint = { path = "../../../neco-bigint" }
+neco-algnum = { path = "../../../neco-algnum" }
+neco-expr = { path = "../../../neco-expr" }
+neco-formsum = { path = "../../../neco-formsum" }
+neco-linear-exact = { path = "../../../neco-linear-exact" }
+neco-linear-types = { path = "../../../neco-linear-types" }
+neco-monomial = { path = "../../../neco-monomial" }
+serde_json = "1.0"

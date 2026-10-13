@@ -78,7 +78,7 @@ fn evaluated_layer(graph: &ExprGraph, atoms: &AtomStore, expression: ExprId) -> 
 }
 
 #[test]
-fn v1_lower_layer_addition_and_integer_power_return_form_sums() {
+fn lower_layer_addition_and_integer_power_return_form_sums() {
     let mut graph = ExprGraph::new();
     let mut atoms = AtomStore::new();
     atoms
@@ -107,7 +107,7 @@ fn v1_lower_layer_addition_and_integer_power_return_form_sums() {
 }
 
 #[test]
-fn v2_true_form_sum_root_and_algebraic_product_return_algebraic_values() {
+fn true_form_sum_root_and_algebraic_product_return_algebraic_values() {
     let form = dyadic_form(Sign::Positive, 4, 0);
     let algebraic = RealAlgebraic::from_form_sum(&form).unwrap();
     let mut graph = ExprGraph::new();
@@ -346,7 +346,7 @@ fn algebraic_isolation_is_shared_only_for_equal_expression_and_precision() {
 }
 
 #[test]
-fn v8_changing_only_the_high_precision_requirement_preserves_the_other_result() {
+fn changing_only_the_high_precision_requirement_preserves_the_other_result() {
     let mut graph = ExprGraph::new();
     let expr = graph.push(ExprNode::Atom(AtomId::new(0))).unwrap();
     let mut atoms = AtomStore::new();
